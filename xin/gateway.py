@@ -70,6 +70,22 @@ JUDGE_PROMPT = """你是检索执行器的证据判定环节，只判断候选�
 只输出 JSON：{"claim_status":"ok|ambiguous|invalid","labels":[{"id":"...","label":"supports|refutes|background|unrelated","why":"一句话"}]}"""
 
 
+def norm_time(v, tz):
+    """把模型给的时间转成 UTC ISO。接受 ISO（带 Z）、YYYY-MM-DD、YYYY-MM-DD HH:MM[:SS]（按对话时区）。无法解析返回 None。"""
+    from zoneinfo import ZoneInfo
+    from datetime import timezone as _tz
+    if not isinstance(v, str): return None
+    v = v.strip()
+    for fmt, local in (("%Y-%m-%dT%H:%M:%SZ", False), ("%Y-%m-%dT%H:%M:%S", True), ("%Y-%m-%d %H:%M:%S", True), ("%Y-%m-%d %H:%M", True), ("%Y-%m-%d", True)):
+        try:
+            d = datetime.strptime(v, fmt)
+        except ValueError:
+            continue
+        d = d.replace(tzinfo=ZoneInfo(tz) if local else _tz.utc)
+        return d.astimezone(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return None
+
+
 def hard_check(e, rng, current_key, ids):
     reasons = []
     if e["id"] == current_key: reasons.append("是当前消息，不能替代历史")
@@ -99,9 +115,16 @@ def execute(conn, run_id, req, dir_, current_key, now_iso, tz, judge=None, origi
     kws = [k for k in req["keywords"] if k]
     rng = None
     tr = req["time_range"] or {}
-    if tr.get("start") and tr.get("end"):
-        rng = {"start_utc": tr["start"], "end_utc": tr["end"], "start_local": tr["start"], "end_local": tr["end"], "tz": "UTC"}
-    elif req["time_expression"]:
+    if tr.get("start") or tr.get("end"):
+        s_utc, e_utc = norm_time(tr.get("start"), tz), norm_time(tr.get("end"), tz)
+        if s_utc and e_utc and s_utc < e_utc:
+            if len(str(tr.get("end")).strip()) == 10:   # 只给日期的结束日，按当天结束（左闭右开取次日 00:00）
+                e_utc = (datetime.strptime(e_utc, "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            rng = {"start_utc": s_utc, "end_utc": e_utc, "start_local": history.local(s_utc, tz), "end_local": history.local(e_utc, tz), "tz": tz + "（模型给出的区间）"}
+        else:
+            log["notes"].append(f"time_range 无法解析或不完整：{tr}，改用 time_expression")
+            log["flags"].append("time_range_unparsable")
+    if not rng and req["time_expression"]:
         rng = history.resolve(req["time_expression"], now_iso, tz)
         if not rng: log["notes"].append(f"时间说法无法解析：{req['time_expression']}")
     if rng: log["time"]["resolved_time_range"] = f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}（左闭右开，按自然日）"

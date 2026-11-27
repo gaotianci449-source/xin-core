@@ -195,11 +195,15 @@ def auto(case, rows):
     a["polluted"] = any(c.get("polluted") for c in calls)
     return a
 
-def main(mode="pilot", proto="tools"):
+def main(mode="pilot", proto="tools", only=None):
+    """only：只补跑指定样本，如 Q9:O:3,4,5（无效样本补跑用）"""
+    sel = None
+    if only:
+        c, g, rs = only.split(":"); sel = (c, g, {int(x) for x in rs.split(",")})
     hist0 = json.load(open("fixtures/stage1_history.json", encoding="utf-8"))
     cs = json.load(open("fixtures/stage1_cases.json", encoding="utf-8"))
     params = json.load(open("e1_params.json", encoding="utf-8"))
-    out = os.path.join("runs", f"stage1-{mode}-{proto}-" + time.strftime("%Y%m%d-%H%M%S")); os.makedirs(out, exist_ok=True)
+    out = os.path.join("runs", f"stage1-{mode}-{proto}-" + ("rerun-" if sel else "") + time.strftime("%Y%m%d-%H%M%S")); os.makedirs(out, exist_ok=True)
     frozen = {"history": hist0, "cases": cs, "params": params, "o_protocol": proto, "budget": gateway.BUDGET, "tool": gateway.TOOL, "o_note": O_NOTE}
     json.dump(frozen, open(os.path.join(out, "frozen_inputs.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     results, review = [], ["# 第一阶段人工语义判定表", "", f"批次：{mode}　O 组协议：{proto}　预算：{gateway.BUDGET}", ""]
@@ -207,8 +211,10 @@ def main(mode="pilot", proto="tools"):
         n = cs["rounds_pilot"] if mode == "pilot" else case["rounds_formal"]
         review += [f"## {case['case_id']}　{case['name']}", f"- 目标：{case['target']}", f"- 可接受：{case['acceptable']}",
                    f"- 必须拒绝：{case['must_reject']}", f"- 证据缺失时：{case['missing_behavior']}", f"- 允许澄清：{case['clarify_ok']}", ""]
+        if sel and case["case_id"] != sel[0]: continue
         for rnd in range(1, n + 1):
             for g in ("S", "R", "O", "D"):
+                if sel and (g != sel[1] or rnd not in sel[2]): continue
                 run_id = f"{case['case_id']}:{g}:r{rnd}"
                 hist = copy.deepcopy(hist0)
                 conn = build_db(os.path.join(out, f"{case['case_id']}-{g}-r{rnd}.db"), hist, run_id)
