@@ -8,7 +8,8 @@
   "新主题的 state_key 名字由模型起，预期里用 $NEW1 占位：只检查标成新建，后续步骤检查是否复用同一个名字。",
   "expected_directory 为 from_db 的步骤：用前序步骤的预期结果推出预期目录，再与程序实际组装的比对。",
   "第二层每条用例从 initial_db 独立开始；c6 只在第一层（Mock）跑。",
-  "场景 B（同一事件产生两条互相冲突的新状态）不在契约要求的 6 类里，本版未覆盖。"
+  "场景 B（同一事件产生两条互相冲突的新状态）不在契约要求的 6 类里，本版未覆盖。",
+  "试运行后修订（2026-11-27）：c2 原消息“被我对象带偏的”含两条新信息（还有“有对象”），改为只含一条。"
  ],
  "cases": [
   {
@@ -173,7 +174,7 @@
       "sender": "阿凯",
       "time": "2026-11-27T12:10:00Z",
       "session": "qq-private-akai",
-      "text": "芫荽现在我居然能吃点了 被我对象带偏的😂"
+      "text": "芫荽现在我居然能吃点了 吃着吃着就习惯了😂"
      },
      "chat_context": [
       {
@@ -210,7 +211,7 @@
         "state_key": "akai.cilantro",
         "is_new": false,
         "status_tag": "valid",
-        "content": "阿凯现在能吃一点香菜了，受对象影响。",
+        "content": "阿凯现在能吃一点香菜了，吃多了就习惯了。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c2:s1"
@@ -227,7 +228,7 @@
         "is_new": false,
         "status_tag": "valid",
         "state_version": 2,
-        "meaning": "现在能吃一点香菜了（受对象影响）"
+        "meaning": "现在能吃一点香菜了（吃习惯了）"
        }
       ],
       "conflict_links": [],

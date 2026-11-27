@@ -25,6 +25,7 @@ class MockModel:
         return json.dumps(self.output, ensure_ascii=False)
 
 
+PROMPT_VERSION = "b-layer-v2"  # v2：加主题粒度说明（试运行后，正式评估前）
 SYSTEM = """你负责维护一份关于对话对象的状态记录。每次会收到：当前事件、之前的聊天、现有状态目录、证据原文。
 判断当前事件对状态记录意味着什么，只输出一个 JSON 对象：
 {"result": "keep|write|conflict", "candidates": [...], "reason": "简短理由"}
@@ -34,6 +35,8 @@ SYSTEM = """你负责维护一份关于对话对象的状态记录。每次会�
 - write：新增状态，status_tag 只能是 valid（确定）或 pending（不确定、可能、还没定）。
 - conflict：与目录里已有状态矛盾且没有说明变化原因；新候选 status_tag 为 conflict，conflict_with 填目录里对应的 state_id。说明了原因或时间的变化是更新，用 write。
 - 同一主题必须使用目录里已有的 state_key，原样照抄，is_new=false；目录里没有的主题才新建，is_new=true，key 用小写英文、数字、下划线和点。
+- 一个 state_key 对应这个人的一个方面（比如工作城市、作息、口味、某个爱好）。关于这个方面的近况补充、计划、可能的变化，都记在同一个 key 下，不另开新 key。
+- 一条消息里如果有几个不同方面的新信息，每个方面各出一个候选。
 - evidence_ref_list 必须包含当前事件的 event_unique_key。
 - 不要输出 state_version 或 state_id 字段。"""
 

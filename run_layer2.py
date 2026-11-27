@@ -62,6 +62,8 @@ def main(mode="pilot"):
                 cv = engine.directory(conn)["current_valid"]
                 want = {names.get(k, k): v for k, v in exp.get("current_valid", {}).items()}
                 if cv != want: errs.append(f"{tag}: 当前有效预期 {want}，实际 {cv}")
+                for s in new[len(ec):]:
+                    contents.append((step["step_id"], step["event"]["text"], "（预期之外的新增）", s["content"] + f" key={s['state_key']}", s["status_tag"]))
                 if not new:
                     contents.append((step["step_id"], step["event"]["text"], "（预期不新增）", f"[{row['result']}] {row['reason']}", ""))
             conn.close()
