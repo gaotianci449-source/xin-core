@@ -1,19 +1,22 @@
 {
  "fixture_id": "e1-v1",
- "status": "草案，待郜.确认",
+ "status": "草案",
  "max_attempts": 3,
  "notes": [
-  "新主题的 state_key 名称由模型起，无法预知：预期里用 $NEW1 占位，只检查“标记为新建”，并在后续步骤检查是否复用同一个名字。",
-  "第二层每条用例从 initial_db 独立开始；第一层 Mock 也按用例各自的 initial_db 起步。",
-  "c6 只在第一层（Mock）跑。",
+  "测试消息是普通人日常口语（连发、口头禅、表情、换叫法），不用郜.本人的情况。发送人是虚构的“阿凯”。",
+  "判定口径：说明了原因或时间的变化算更新（write valid）；没解释的前后矛盾算冲突；“可能/还没定”算 pending；笑、表情、复述已知算 keep。",
+  "新主题的 state_key 名字由模型起，预期里用 $NEW1 占位：只检查标成新建，后续步骤检查是否复用同一个名字。",
+  "expected_directory 为 from_db 的步骤：用前序步骤的预期结果推出预期目录，再与程序实际组装的比对。",
+  "第二层每条用例从 initial_db 独立开始；c6 只在第一层（Mock）跑。",
   "场景 B（同一事件产生两条互相冲突的新状态）不在契约要求的 6 类里，本版未覆盖。"
  ],
  "cases": [
   {
    "case_id": "c1",
-   "purpose": "新主题首次写入 valid",
+   "purpose": "新主题首次写入；紧接着的补充复用刚建的 key",
    "covers": [
-    1
+    1,
+    2
    ],
    "initial_db": {
     "events": [],
@@ -25,10 +28,10 @@
      "step_id": "s1",
      "event": {
       "event_unique_key": "e1-v1:c1:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:00:00Z",
-      "session": "qq-private-gao",
-      "text": "我这周开始每天中午在工地食堂吃饭。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "最近迷上爬山了"
      },
      "chat_context": [],
      "expected_directory": {
@@ -40,17 +43,17 @@
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.lunch",
+        "state_key": "akai.hiking",
         "is_new": true,
         "status_tag": "valid",
-        "content": "郜天赐这周开始每天中午在工地食堂吃饭。",
+        "content": "阿凯最近迷上了爬山。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c1:s1"
         ]
        }
       ],
-      "reason": "目录里没有午饭相关主题，新建。"
+      "reason": "目录为空，新建。"
      },
      "expect": {
       "result": "write",
@@ -60,7 +63,7 @@
         "is_new": true,
         "status_tag": "valid",
         "state_version": 1,
-        "meaning": "他（这周起）每天中午在工地食堂吃饭"
+        "meaning": "最近喜欢上爬山"
        }
       ],
       "conflict_links": [],
@@ -72,35 +75,91 @@
        "e1-v1:c1:s1"
       ]
      }
+    },
+    {
+     "step_id": "s2",
+     "event": {
+      "event_unique_key": "e1-v1:c1:s2",
+      "sender": "阿凯",
+      "time": "2026-11-27T12:00:20Z",
+      "session": "qq-private-akai",
+      "text": "上周去了趟梧桐山 累成狗🥲"
+     },
+     "chat_context": [
+      {
+       "event_unique_key": "e1-v1:c1:s1",
+       "sender": "阿凯",
+       "time": "2026-11-27T12:00:00Z",
+       "session": "qq-private-akai",
+       "text": "最近迷上爬山了"
+      }
+     ],
+     "expected_directory": "from_db",
+     "mock_output": {
+      "result": "write",
+      "candidates": [
+       {
+        "state_key": "akai.hiking",
+        "is_new": false,
+        "status_tag": "valid",
+        "content": "阿凯最近迷上爬山，上周去爬了梧桐山，很累。",
+        "conflict_with": [],
+        "evidence_ref_list": [
+         "e1-v1:c1:s2"
+        ]
+       }
+      ],
+      "reason": "同一主题的补充。"
+     },
+     "expect": {
+      "result": "write",
+      "candidates": [
+       {
+        "state_key": "$NEW1",
+        "is_new": false,
+        "status_tag": "valid",
+        "state_version": 2,
+        "meaning": "喜欢爬山；上周爬了梧桐山，很累"
+       }
+      ],
+      "conflict_links": [],
+      "current_valid": {
+       "$NEW1": 2
+      },
+      "event_log": "write",
+      "evidence_must_include": [
+       "e1-v1:c1:s2"
+      ]
+     }
     }
    ]
   },
   {
    "case_id": "c2",
-   "purpose": "同义/近义表达复用已有 state_key；明确的时间变化算更新，不算冲突",
+   "purpose": "换了叫法（芫荽=香菜）仍复用已有 key；说明了原因的变化算更新，不算冲突",
    "covers": [
     2
    ],
    "initial_db": {
     "events": [
      {
-      "event_unique_key": "e1-v1:pre:wake",
-      "sender": "郜天赐",
-      "time": "2026-11-26T20:00:00Z",
-      "session": "qq-private-gao",
-      "text": "我每天早上六点半起床，七点到工地。"
+      "event_unique_key": "e1-v1:pre:cilantro",
+      "sender": "阿凯",
+      "time": "2026-11-26T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "香菜我是一口都不碰的"
      }
     ],
     "states": [
      {
-      "state_id": "S-wake-1",
-      "state_key": "gao.wake_time",
+      "state_id": "S-cil-1",
+      "state_key": "akai.cilantro",
       "state_version": 1,
       "status_tag": "valid",
-      "content": "郜天赐每天早上六点半起床，七点到工地。",
-      "target_event_id": "e1-v1:pre:wake",
+      "content": "阿凯不吃香菜。",
+      "target_event_id": "e1-v1:pre:cilantro",
       "evidence_ref_list": [
-       "e1-v1:pre:wake"
+       "e1-v1:pre:cilantro"
       ]
      }
     ],
@@ -111,69 +170,69 @@
      "step_id": "s1",
      "event": {
       "event_unique_key": "e1-v1:c2:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:10:00Z",
-      "session": "qq-private-gao",
-      "text": "这周工地提前开工，我六点就得爬起来了。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:10:00Z",
+      "session": "qq-private-akai",
+      "text": "芫荽现在我居然能吃点了 被我对象带偏的😂"
      },
      "chat_context": [
       {
-       "event_unique_key": "e1-v1:pre:wake",
-       "sender": "郜天赐",
-       "time": "2026-11-26T20:00:00Z",
-       "session": "qq-private-gao",
-       "text": "我每天早上六点半起床，七点到工地。"
+       "event_unique_key": "e1-v1:pre:cilantro",
+       "sender": "阿凯",
+       "time": "2026-11-26T12:00:00Z",
+       "session": "qq-private-akai",
+       "text": "香菜我是一口都不碰的"
       }
      ],
      "expected_directory": {
       "states": [
        {
-        "state_id": "S-wake-1",
-        "state_key": "gao.wake_time",
+        "state_id": "S-cil-1",
+        "state_key": "akai.cilantro",
         "state_version": 1,
         "status_tag": "valid",
-        "content": "郜天赐每天早上六点半起床，七点到工地。",
-        "target_event_id": "e1-v1:pre:wake",
+        "content": "阿凯不吃香菜。",
+        "target_event_id": "e1-v1:pre:cilantro",
         "evidence_ref_list": [
-         "e1-v1:pre:wake"
+         "e1-v1:pre:cilantro"
         ]
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.cilantro": 1
       }
      },
      "mock_output": {
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.wake_time",
+        "state_key": "akai.cilantro",
         "is_new": false,
         "status_tag": "valid",
-        "content": "这周起工地提前开工，郜天赐改为早上六点起床。",
+        "content": "阿凯现在能吃一点香菜了，受对象影响。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c2:s1"
         ]
        }
       ],
-      "reason": "“爬起来”就是起床，属于已有主题；他说明了原因和起始时间，是更新不是矛盾。"
+      "reason": "芫荽就是香菜；他说明了变化原因，是更新。"
      },
      "expect": {
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.wake_time",
+        "state_key": "akai.cilantro",
         "is_new": false,
         "status_tag": "valid",
         "state_version": 2,
-        "meaning": "这周起改成六点起床（工地提前开工）"
+        "meaning": "现在能吃一点香菜了（受对象影响）"
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 2
+       "akai.cilantro": 2
       },
       "event_log": "write",
       "evidence_must_include": [
@@ -185,30 +244,30 @@
   },
   {
    "case_id": "c3",
-   "purpose": "信息不足 → pending；之前的 valid 仍是当前有效状态",
+   "purpose": "没确定的消息 → pending；原来的 valid 仍是当前有效状态",
    "covers": [
     3
    ],
    "initial_db": {
     "events": [
      {
-      "event_unique_key": "e1-v1:pre:wake",
-      "sender": "郜天赐",
-      "time": "2026-11-26T20:00:00Z",
-      "session": "qq-private-gao",
-      "text": "我每天早上六点半起床，七点到工地。"
+      "event_unique_key": "e1-v1:pre:city",
+      "sender": "阿凯",
+      "time": "2026-11-26T12:05:00Z",
+      "session": "qq-private-akai",
+      "text": "我在深圳上班 南山那边"
      }
     ],
     "states": [
      {
-      "state_id": "S-wake-1",
-      "state_key": "gao.wake_time",
+      "state_id": "S-city-1",
+      "state_key": "akai.work_city",
       "state_version": 1,
       "status_tag": "valid",
-      "content": "郜天赐每天早上六点半起床，七点到工地。",
-      "target_event_id": "e1-v1:pre:wake",
+      "content": "阿凯在深圳南山上班。",
+      "target_event_id": "e1-v1:pre:city",
       "evidence_ref_list": [
-       "e1-v1:pre:wake"
+       "e1-v1:pre:city"
       ]
      }
     ],
@@ -219,69 +278,69 @@
      "step_id": "s1",
      "event": {
       "event_unique_key": "e1-v1:c3:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:20:00Z",
-      "session": "qq-private-gao",
-      "text": "明天可能还要更早，看领导怎么安排吧。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:20:00Z",
+      "session": "qq-private-akai",
+      "text": "年后可能要被调去成都 还没定 烦"
      },
      "chat_context": [
       {
-       "event_unique_key": "e1-v1:pre:wake",
-       "sender": "郜天赐",
-       "time": "2026-11-26T20:00:00Z",
-       "session": "qq-private-gao",
-       "text": "我每天早上六点半起床，七点到工地。"
+       "event_unique_key": "e1-v1:pre:city",
+       "sender": "阿凯",
+       "time": "2026-11-26T12:05:00Z",
+       "session": "qq-private-akai",
+       "text": "我在深圳上班 南山那边"
       }
      ],
      "expected_directory": {
       "states": [
        {
-        "state_id": "S-wake-1",
-        "state_key": "gao.wake_time",
+        "state_id": "S-city-1",
+        "state_key": "akai.work_city",
         "state_version": 1,
         "status_tag": "valid",
-        "content": "郜天赐每天早上六点半起床，七点到工地。",
-        "target_event_id": "e1-v1:pre:wake",
+        "content": "阿凯在深圳南山上班。",
+        "target_event_id": "e1-v1:pre:city",
         "evidence_ref_list": [
-         "e1-v1:pre:wake"
+         "e1-v1:pre:city"
         ]
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.work_city": 1
       }
      },
      "mock_output": {
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.wake_time",
+        "state_key": "akai.work_city",
         "is_new": false,
         "status_tag": "pending",
-        "content": "郜天赐明天可能要比六点半更早起床，取决于领导安排，未确定。",
+        "content": "阿凯年后可能被调去成都工作，尚未确定。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c3:s1"
         ]
        }
       ],
-      "reason": "只是可能，没确定。"
+      "reason": "只是可能。"
      },
      "expect": {
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.wake_time",
+        "state_key": "akai.work_city",
         "is_new": false,
         "status_tag": "pending",
         "state_version": 2,
-        "meaning": "明天可能更早起，未确定"
+        "meaning": "年后可能调去成都，未定"
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.work_city": 1
       },
       "event_log": "write",
       "evidence_must_include": [
@@ -293,30 +352,30 @@
   },
   {
    "case_id": "c4",
-   "purpose": "新信息与存量状态矛盾 → 双方保留，conflict_link，旧状态 status_tag 不变；该 key 暂无当前有效状态",
+   "purpose": "前后说法矛盾且没解释 → conflict；双方保留，旧记录不改；该 key 暂无当前有效状态",
    "covers": [
     4
    ],
    "initial_db": {
     "events": [
      {
-      "event_unique_key": "e1-v1:pre:coffee",
-      "sender": "郜天赐",
-      "time": "2026-11-26T20:05:00Z",
-      "session": "qq-private-gao",
-      "text": "咖啡贼难喝，我从来不喝。"
+      "event_unique_key": "e1-v1:pre:drive",
+      "sender": "阿凯",
+      "time": "2026-11-26T12:10:00Z",
+      "session": "qq-private-akai",
+      "text": "我没驾照 不会开车"
      }
     ],
     "states": [
      {
-      "state_id": "S-coffee-1",
-      "state_key": "gao.coffee",
+      "state_id": "S-drive-1",
+      "state_key": "akai.driving",
       "state_version": 1,
       "status_tag": "valid",
-      "content": "郜天赐不喝咖啡，觉得咖啡难喝。",
-      "target_event_id": "e1-v1:pre:coffee",
+      "content": "阿凯没有驾照，不会开车。",
+      "target_event_id": "e1-v1:pre:drive",
       "evidence_ref_list": [
-       "e1-v1:pre:coffee"
+       "e1-v1:pre:drive"
       ]
      }
     ],
@@ -327,76 +386,76 @@
      "step_id": "s1",
      "event": {
       "event_unique_key": "e1-v1:c4:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:30:00Z",
-      "session": "qq-private-gao",
-      "text": "我每天上午都要喝两杯咖啡，不喝没精神。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:30:00Z",
+      "session": "qq-private-akai",
+      "text": "昨天自己开车去的东莞 堵死我了"
      },
      "chat_context": [
       {
-       "event_unique_key": "e1-v1:pre:coffee",
-       "sender": "郜天赐",
-       "time": "2026-11-26T20:05:00Z",
-       "session": "qq-private-gao",
-       "text": "咖啡贼难喝，我从来不喝。"
+       "event_unique_key": "e1-v1:pre:drive",
+       "sender": "阿凯",
+       "time": "2026-11-26T12:10:00Z",
+       "session": "qq-private-akai",
+       "text": "我没驾照 不会开车"
       }
      ],
      "expected_directory": {
       "states": [
        {
-        "state_id": "S-coffee-1",
-        "state_key": "gao.coffee",
+        "state_id": "S-drive-1",
+        "state_key": "akai.driving",
         "state_version": 1,
         "status_tag": "valid",
-        "content": "郜天赐不喝咖啡，觉得咖啡难喝。",
-        "target_event_id": "e1-v1:pre:coffee",
+        "content": "阿凯没有驾照，不会开车。",
+        "target_event_id": "e1-v1:pre:drive",
         "evidence_ref_list": [
-         "e1-v1:pre:coffee"
+         "e1-v1:pre:drive"
         ]
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.coffee": 1
+       "akai.driving": 1
       }
      },
      "mock_output": {
       "result": "conflict",
       "candidates": [
        {
-        "state_key": "gao.coffee",
+        "state_key": "akai.driving",
         "is_new": false,
         "status_tag": "conflict",
-        "content": "郜天赐说自己每天上午喝两杯咖啡，不喝没精神。",
+        "content": "阿凯说昨天自己开车去了东莞。",
         "conflict_with": [
-         "S-coffee-1"
+         "S-drive-1"
         ],
         "evidence_ref_list": [
          "e1-v1:c4:s1"
         ]
        }
       ],
-      "reason": "他之前说从来不喝咖啡，这次说每天喝两杯，没有说明变化原因。"
+      "reason": "之前说没驾照不会开车，这次说自己开车，没解释。"
      },
      "expect": {
       "result": "conflict",
       "candidates": [
        {
-        "state_key": "gao.coffee",
+        "state_key": "akai.driving",
         "is_new": false,
         "status_tag": "conflict",
         "state_version": 2,
-        "meaning": "每天上午喝两杯咖啡"
+        "meaning": "说昨天自己开车去了东莞"
        }
       ],
       "conflict_links": [
        {
-        "a": "S-coffee-1",
-        "b": "$THIS:gao.coffee:2"
+        "a": "S-drive-1",
+        "b": "$THIS"
        }
       ],
       "old_state_unchanged": [
-       "S-coffee-1"
+       "S-drive-1"
       ],
       "current_valid": {},
       "event_log": "conflict",
@@ -409,30 +468,30 @@
   },
   {
    "case_id": "c5",
-   "purpose": "无新信息 → keep：事件已处理、不新增状态",
+   "purpose": "笑、表情、复述已知 → keep",
    "covers": [
     5
    ],
    "initial_db": {
     "events": [
      {
-      "event_unique_key": "e1-v1:pre:wake",
-      "sender": "郜天赐",
-      "time": "2026-11-26T20:00:00Z",
-      "session": "qq-private-gao",
-      "text": "我每天早上六点半起床，七点到工地。"
+      "event_unique_key": "e1-v1:pre:city",
+      "sender": "阿凯",
+      "time": "2026-11-26T12:05:00Z",
+      "session": "qq-private-akai",
+      "text": "我在深圳上班 南山那边"
      }
     ],
     "states": [
      {
-      "state_id": "S-wake-1",
-      "state_key": "gao.wake_time",
+      "state_id": "S-city-1",
+      "state_key": "akai.work_city",
       "state_version": 1,
       "status_tag": "valid",
-      "content": "郜天赐每天早上六点半起床，七点到工地。",
-      "target_event_id": "e1-v1:pre:wake",
+      "content": "阿凯在深圳南山上班。",
+      "target_event_id": "e1-v1:pre:city",
       "evidence_ref_list": [
-       "e1-v1:pre:wake"
+       "e1-v1:pre:city"
       ]
      }
     ],
@@ -443,50 +502,50 @@
      "step_id": "s1",
      "event": {
       "event_unique_key": "e1-v1:c5:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:40:00Z",
-      "session": "qq-private-gao",
-      "text": "哈哈哈哈"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:40:00Z",
+      "session": "qq-private-akai",
+      "text": "哈哈哈哈哈哈"
      },
      "chat_context": [
       {
-       "event_unique_key": "e1-v1:pre:wake",
-       "sender": "郜天赐",
-       "time": "2026-11-26T20:00:00Z",
-       "session": "qq-private-gao",
-       "text": "我每天早上六点半起床，七点到工地。"
+       "event_unique_key": "e1-v1:pre:city",
+       "sender": "阿凯",
+       "time": "2026-11-26T12:05:00Z",
+       "session": "qq-private-akai",
+       "text": "我在深圳上班 南山那边"
       }
      ],
      "expected_directory": {
       "states": [
        {
-        "state_id": "S-wake-1",
-        "state_key": "gao.wake_time",
+        "state_id": "S-city-1",
+        "state_key": "akai.work_city",
         "state_version": 1,
         "status_tag": "valid",
-        "content": "郜天赐每天早上六点半起床，七点到工地。",
-        "target_event_id": "e1-v1:pre:wake",
+        "content": "阿凯在深圳南山上班。",
+        "target_event_id": "e1-v1:pre:city",
         "evidence_ref_list": [
-         "e1-v1:pre:wake"
+         "e1-v1:pre:city"
         ]
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.work_city": 1
       }
      },
      "mock_output": {
       "result": "keep",
       "candidates": [],
-      "reason": "笑声，没有新信息。"
+      "reason": "没有新信息。"
      },
      "expect": {
       "result": "keep",
       "candidates": [],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.work_city": 1
       },
       "event_log": "keep"
      }
@@ -495,57 +554,123 @@
      "step_id": "s2",
      "event": {
       "event_unique_key": "e1-v1:c5:s2",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:41:00Z",
-      "session": "qq-private-gao",
-      "text": "对，还是六点半起。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:40:10Z",
+      "session": "qq-private-akai",
+      "text": "🤣"
      },
      "chat_context": [
       {
-       "event_unique_key": "e1-v1:pre:wake",
-       "sender": "郜天赐",
-       "time": "2026-11-26T20:00:00Z",
-       "session": "qq-private-gao",
-       "text": "我每天早上六点半起床，七点到工地。"
+       "event_unique_key": "e1-v1:pre:city",
+       "sender": "阿凯",
+       "time": "2026-11-26T12:05:00Z",
+       "session": "qq-private-akai",
+       "text": "我在深圳上班 南山那边"
       },
       {
        "event_unique_key": "e1-v1:c5:s1",
-       "sender": "郜天赐",
-       "time": "2026-11-27T07:40:00Z",
-       "session": "qq-private-gao",
-       "text": "哈哈哈哈"
+       "sender": "阿凯",
+       "time": "2026-11-27T12:40:00Z",
+       "session": "qq-private-akai",
+       "text": "哈哈哈哈哈哈"
       }
      ],
      "expected_directory": {
       "states": [
        {
-        "state_id": "S-wake-1",
-        "state_key": "gao.wake_time",
+        "state_id": "S-city-1",
+        "state_key": "akai.work_city",
         "state_version": 1,
         "status_tag": "valid",
-        "content": "郜天赐每天早上六点半起床，七点到工地。",
-        "target_event_id": "e1-v1:pre:wake",
+        "content": "阿凯在深圳南山上班。",
+        "target_event_id": "e1-v1:pre:city",
         "evidence_ref_list": [
-         "e1-v1:pre:wake"
+         "e1-v1:pre:city"
         ]
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.work_city": 1
       }
      },
      "mock_output": {
       "result": "keep",
       "candidates": [],
-      "reason": "跟已有状态一致。"
+      "reason": "没有新信息。"
      },
      "expect": {
       "result": "keep",
       "candidates": [],
       "conflict_links": [],
       "current_valid": {
-       "gao.wake_time": 1
+       "akai.work_city": 1
+      },
+      "event_log": "keep"
+     }
+    },
+    {
+     "step_id": "s3",
+     "event": {
+      "event_unique_key": "e1-v1:c5:s3",
+      "sender": "阿凯",
+      "time": "2026-11-27T12:41:00Z",
+      "session": "qq-private-akai",
+      "text": "嗯嗯 还在深圳 老地方"
+     },
+     "chat_context": [
+      {
+       "event_unique_key": "e1-v1:pre:city",
+       "sender": "阿凯",
+       "time": "2026-11-26T12:05:00Z",
+       "session": "qq-private-akai",
+       "text": "我在深圳上班 南山那边"
+      },
+      {
+       "event_unique_key": "e1-v1:c5:s1",
+       "sender": "阿凯",
+       "time": "2026-11-27T12:40:00Z",
+       "session": "qq-private-akai",
+       "text": "哈哈哈哈哈哈"
+      },
+      {
+       "event_unique_key": "e1-v1:c5:s2",
+       "sender": "阿凯",
+       "time": "2026-11-27T12:40:10Z",
+       "session": "qq-private-akai",
+       "text": "🤣"
+      }
+     ],
+     "expected_directory": {
+      "states": [
+       {
+        "state_id": "S-city-1",
+        "state_key": "akai.work_city",
+        "state_version": 1,
+        "status_tag": "valid",
+        "content": "阿凯在深圳南山上班。",
+        "target_event_id": "e1-v1:pre:city",
+        "evidence_ref_list": [
+         "e1-v1:pre:city"
+        ]
+       }
+      ],
+      "conflict_links": [],
+      "current_valid": {
+       "akai.work_city": 1
+      }
+     },
+     "mock_output": {
+      "result": "keep",
+      "candidates": [],
+      "reason": "没有新信息。"
+     },
+     "expect": {
+      "result": "keep",
+      "candidates": [],
+      "conflict_links": [],
+      "current_valid": {
+       "akai.work_city": 1
       },
       "event_log": "keep"
      }
@@ -554,7 +679,7 @@
   },
   {
    "case_id": "c6",
-   "purpose": "故障注入：超时、坏 JSON、达到上限、重复提交幂等",
+   "purpose": "故障注入：超时、坏 JSON、达到上限、重复提交、事务中途出错",
    "covers": [
     6
    ],
@@ -571,10 +696,10 @@
      "step_id": "s1",
      "event": {
       "event_unique_key": "e1-v1:c6:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:50:00Z",
-      "session": "qq-private-gao",
-      "text": "我晚上一般十一点睡。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:50:00Z",
+      "session": "qq-private-akai",
+      "text": "我一般凌晨一点才睡 夜猫子"
      },
      "chat_context": [],
      "expected_directory": {
@@ -590,10 +715,10 @@
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.sleep_time",
+        "state_key": "akai.sleep",
         "is_new": true,
         "status_tag": "valid",
-        "content": "郜天赐晚上一般十一点睡。",
+        "content": "阿凯一般凌晨一点才睡。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c6:s1"
@@ -605,16 +730,8 @@
      "expect": {
       "attempts": 3,
       "result": "write",
-      "candidates": [
-       {
-        "state_key": "gao.sleep_time",
-        "is_new": true,
-        "status_tag": "valid",
-        "state_version": 1
-       }
-      ],
       "current_valid": {
-       "gao.sleep_time": 1
+       "akai.sleep": 1
       },
       "event_log": "write",
       "failure_log_entries": 2
@@ -625,17 +742,17 @@
      "resubmit_of": "s1",
      "event": {
       "event_unique_key": "e1-v1:c6:s1",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:50:00Z",
-      "session": "qq-private-gao",
-      "text": "我晚上一般十一点睡。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:50:00Z",
+      "session": "qq-private-akai",
+      "text": "我一般凌晨一点才睡 夜猫子"
      },
      "expect": {
       "model_called": false,
       "duplicate": true,
       "new_rows": 0,
       "current_valid": {
-       "gao.sleep_time": 1
+       "akai.sleep": 1
       }
      }
     },
@@ -643,21 +760,21 @@
      "step_id": "s2",
      "event": {
       "event_unique_key": "e1-v1:c6:s2",
-      "sender": "郜天赐",
-      "time": "2026-11-27T07:55:00Z",
-      "session": "qq-private-gao",
-      "text": "周末我会睡到中午。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:51:00Z",
+      "session": "qq-private-akai",
+      "text": "周末直接睡到下午"
      },
      "chat_context": [
       {
        "event_unique_key": "e1-v1:c6:s1",
-       "sender": "郜天赐",
-       "time": "2026-11-27T07:50:00Z",
-       "session": "qq-private-gao",
-       "text": "我晚上一般十一点睡。"
+       "sender": "阿凯",
+       "time": "2026-11-27T12:50:00Z",
+       "session": "qq-private-akai",
+       "text": "我一般凌晨一点才睡 夜猫子"
       }
      ],
-     "expected_directory": "after_s1",
+     "expected_directory": "from_db",
      "inject": [
       "timeout",
       "schema_invalid",
@@ -670,20 +787,21 @@
       "main_db_event_log": "none",
       "failure_log_entries": 3,
       "current_valid": {
-       "gao.sleep_time": 1
+       "akai.sleep": 1
       }
      }
     },
     {
-     "step_id": "s3-txn-abort",
+     "step_id": "s3",
      "event": {
       "event_unique_key": "e1-v1:c6:s3",
-      "sender": "郜天赐",
-      "time": "2026-11-27T08:00:00Z",
-      "session": "qq-private-gao",
-      "text": "我午休半小时。"
+      "sender": "阿凯",
+      "time": "2026-11-27T12:52:00Z",
+      "session": "qq-private-akai",
+      "text": "中午不睡会死"
      },
      "chat_context": [],
+     "expected_directory": "from_db",
      "inject": [
       "abort_inside_transaction"
      ],
@@ -691,10 +809,10 @@
       "result": "write",
       "candidates": [
        {
-        "state_key": "gao.nap",
+        "state_key": "akai.nap",
         "is_new": true,
         "status_tag": "valid",
-        "content": "郜天赐午休半小时。",
+        "content": "阿凯中午必须午睡。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c6:s3"
@@ -707,7 +825,10 @@
       "rolled_back": true,
       "new_rows": 0,
       "main_db_event_log": "none",
-      "failure_log_entries": 1
+      "failure_log_entries": 1,
+      "current_valid": {
+       "akai.sleep": 1
+      }
      }
     }
    ]
