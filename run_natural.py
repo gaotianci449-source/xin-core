@@ -199,7 +199,8 @@ def run_long(params, out, rounds):
                         silent = (not text) or "[不发]" in text
                         entry["wake"] = {"sent": not silent, "text": text, "calls": calls}
                         wakes[g].append({"id": item["id"], "sent": not silent, "len": 0 if silent else len(text)})
-                        if silent: log.append(entry); continue
+                        if silent:
+                            log.append(entry); print(f"  long {g}组 r{rnd} {item['id']} 没发", flush=True); continue
                         store(conn, run_id, f"{run_id}:{item['id']}:w", "你", text, "reply", t)
                         ms[g].append(mech(text, ""))
                         t = plus(t, 120); turns_left = fx["max_turns_after_wake"]
@@ -223,6 +224,7 @@ def run_long(params, out, rounds):
                         t = plus(t, 90); turns_left -= 1
                         intent = item.get("intent", intent) + "（接着刚才的聊，聊完了或者没兴趣了就不回）"
                     log.append(entry)
+                    print(f"  long {g}组 r{rnd} {item['id']} 完成（{len(entry['turns'])} 轮）", flush=True)
             except Exception as e:
                 status = f"无效（执行器/配置故障）：{e}"
             final_states = snapshot_current(engine.directory(conn))
