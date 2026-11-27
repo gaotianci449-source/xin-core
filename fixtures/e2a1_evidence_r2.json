@@ -1,0 +1,242 @@
+{
+ "fixture_id": "e2a1-ev-v2",
+ "purpose": "第二轮证据继承：旧信息被更正或撤销",
+ "rounds_pilot": 5,
+ "rounds_formal": 10,
+ "pass_rate": 0.8,
+ "cases": [
+  {
+   "case_id": "x1",
+   "purpose": "更正：公司从科技园搬到福田。o1 仍支撑“在深圳”须保留；o2 只支撑“在科技园”，正文不再提科技园时须移除",
+   "initial_db": {
+    "events": [
+     {
+      "event_unique_key": "ev2:x1:o1",
+      "sender": "阿凯",
+      "time": "2026-11-21T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "我在深圳上班"
+     },
+     {
+      "event_unique_key": "ev2:x1:o2",
+      "sender": "阿凯",
+      "time": "2026-11-22T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "公司在南山科技园那边"
+     }
+    ],
+    "states": [
+     {
+      "state_id": "S-x1-1",
+      "state_key": "akai.work_place",
+      "state_version": 1,
+      "status_tag": "valid",
+      "content": "阿凯在深圳上班，公司在南山科技园。",
+      "target_event_id": "ev2:x1:o2",
+      "evidence_ref_list": [
+       "ev2:x1:o1",
+       "ev2:x1:o2"
+      ]
+     }
+    ],
+    "conflict_links": []
+   },
+   "event": {
+    "event_unique_key": "ev2:x1:n1",
+    "sender": "阿凯",
+    "time": "2026-11-26T12:00:00Z",
+    "session": "qq-private-akai",
+    "text": "纠正一下 我们公司上个月搬到福田了 不在科技园了"
+   },
+   "chat_context": [
+    {
+     "event_unique_key": "ev2:x1:o1",
+     "sender": "阿凯",
+     "time": "2026-11-21T12:00:00Z",
+     "session": "qq-private-akai",
+     "text": "我在深圳上班"
+    },
+    {
+     "event_unique_key": "ev2:x1:o2",
+     "sender": "阿凯",
+     "time": "2026-11-22T12:00:00Z",
+     "session": "qq-private-akai",
+     "text": "公司在南山科技园那边"
+    }
+   ],
+   "expect": {
+    "result": "write",
+    "state_key": "akai.work_place",
+    "state_version": 2,
+    "status_tag": "valid",
+    "evidence_must_include": [
+     "ev2:x1:o1",
+     "ev2:x1:n1"
+    ],
+    "evidence_must_exclude_if_content_lacks": [
+     {
+      "ref": "ev2:x1:o2",
+      "keywords": [
+       "科技园"
+      ]
+     }
+    ],
+    "content_keywords": [
+     [
+      "深圳"
+     ],
+     [
+      "福田"
+     ]
+    ]
+   }
+  },
+  {
+   "case_id": "x2",
+   "purpose": "撤销：狗送走了。o1 须保留；o2 只支撑“养旺财”，正文不再提旺财时须移除（正文作为经过提到旺财则可保留）",
+   "initial_db": {
+    "events": [
+     {
+      "event_unique_key": "ev2:x2:o1",
+      "sender": "阿凯",
+      "time": "2026-11-21T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "我养了只猫 叫煤球"
+     },
+     {
+      "event_unique_key": "ev2:x2:o2",
+      "sender": "阿凯",
+      "time": "2026-11-22T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "还有条狗 叫旺财"
+     }
+    ],
+    "states": [
+     {
+      "state_id": "S-x2-1",
+      "state_key": "akai.pets",
+      "state_version": 1,
+      "status_tag": "valid",
+      "content": "阿凯养了一只叫煤球的猫和一条叫旺财的狗。",
+      "target_event_id": "ev2:x2:o2",
+      "evidence_ref_list": [
+       "ev2:x2:o1",
+       "ev2:x2:o2"
+      ]
+     }
+    ],
+    "conflict_links": []
+   },
+   "event": {
+    "event_unique_key": "ev2:x2:n1",
+    "sender": "阿凯",
+    "time": "2026-11-26T12:00:00Z",
+    "session": "qq-private-akai",
+    "text": "旺财送我妈那边养了 现在家里就煤球一个"
+   },
+   "chat_context": [
+    {
+     "event_unique_key": "ev2:x2:o1",
+     "sender": "阿凯",
+     "time": "2026-11-21T12:00:00Z",
+     "session": "qq-private-akai",
+     "text": "我养了只猫 叫煤球"
+    },
+    {
+     "event_unique_key": "ev2:x2:o2",
+     "sender": "阿凯",
+     "time": "2026-11-22T12:00:00Z",
+     "session": "qq-private-akai",
+     "text": "还有条狗 叫旺财"
+    }
+   ],
+   "expect": {
+    "result": "write",
+    "state_key": "akai.pets",
+    "state_version": 2,
+    "status_tag": "valid",
+    "evidence_must_include": [
+     "ev2:x2:o1",
+     "ev2:x2:n1"
+    ],
+    "evidence_must_exclude_if_content_lacks": [
+     {
+      "ref": "ev2:x2:o2",
+      "keywords": [
+       "旺财"
+      ]
+     }
+    ],
+    "content_keywords": [
+     [
+      "煤球"
+     ]
+    ]
+   }
+  },
+  {
+   "case_id": "x3",
+   "purpose": "同一事件支撑两条信息、只更正其中一条：o1 仍支撑“在深圳上班”，必须保留",
+   "initial_db": {
+    "events": [
+     {
+      "event_unique_key": "ev2:x3:o1",
+      "sender": "阿凯",
+      "time": "2026-11-21T12:00:00Z",
+      "session": "qq-private-akai",
+      "text": "我在深圳上班 住宝安那边"
+     }
+    ],
+    "states": [
+     {
+      "state_id": "S-x3-1",
+      "state_key": "akai.home_work",
+      "state_version": 1,
+      "status_tag": "valid",
+      "content": "阿凯在深圳上班，住在宝安。",
+      "target_event_id": "ev2:x3:o1",
+      "evidence_ref_list": [
+       "ev2:x3:o1"
+      ]
+     }
+    ],
+    "conflict_links": []
+   },
+   "event": {
+    "event_unique_key": "ev2:x3:n1",
+    "sender": "阿凯",
+    "time": "2026-11-26T12:00:00Z",
+    "session": "qq-private-akai",
+    "text": "搬家了 现在住南山 离公司近多了"
+   },
+   "chat_context": [
+    {
+     "event_unique_key": "ev2:x3:o1",
+     "sender": "阿凯",
+     "time": "2026-11-21T12:00:00Z",
+     "session": "qq-private-akai",
+     "text": "我在深圳上班 住宝安那边"
+    }
+   ],
+   "expect": {
+    "result": "write",
+    "state_key": "akai.home_work",
+    "state_version": 2,
+    "status_tag": "valid",
+    "evidence_must_include": [
+     "ev2:x3:o1",
+     "ev2:x3:n1"
+    ],
+    "evidence_must_exclude_if_content_lacks": [],
+    "content_keywords": [
+     [
+      "深圳"
+     ],
+     [
+      "南山"
+     ]
+    ]
+   }
+  }
+ ]
+}

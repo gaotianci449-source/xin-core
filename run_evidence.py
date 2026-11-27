@@ -1,5 +1,6 @@
 """E2-A.1 第一轮：证据继承验证（旧信息全部保留，新消息只加一条）。
-用法：python3 run_evidence.py pilot|formal    需要 MODEL_API_KEY
+用法：python3 run_evidence.py pilot|formal [用例文件]    需要 MODEL_API_KEY
+第二轮：python3 run_evidence.py pilot fixtures/e2a1_evidence_r2.json
 每次调用记录 B 层原始返回（raw.jsonl），并与程序接收结果、最终入库结果对照。"""
 import json, os, sys, time
 from xin import db, engine
@@ -14,11 +15,11 @@ class Recording:
             f.write(json.dumps({"tag": self.tag, "raw": raw}, ensure_ascii=False) + "\n")
         return raw
 
-def main(mode="pilot"):
-    fx = json.load(open("fixtures/e2a1_evidence.json", encoding="utf-8"))
+def main(mode="pilot", fixture="fixtures/e2a1_evidence.json"):
+    fx = json.load(open(fixture, encoding="utf-8"))
     params = json.load(open("e1_params.json", encoding="utf-8"))
     n = fx["rounds_pilot"] if mode == "pilot" else fx["rounds_formal"]
-    out = os.path.join("runs", f"ev-{mode}-" + time.strftime("%Y%m%d-%H%M%S")); os.makedirs(out, exist_ok=True)
+    out = os.path.join("runs", f"{fx['fixture_id']}-{mode}-" + time.strftime("%Y%m%d-%H%M%S")); os.makedirs(out, exist_ok=True)
     rawlog = os.path.join(out, "raw.jsonl")
     report = []
     for case in fx["cases"]:
@@ -53,6 +54,9 @@ def main(mode="pilot"):
                     if s["status_tag"] != e["status_tag"]: errs.append(f"status_tag {s['status_tag']}")
                     miss = [x for x in e["evidence_must_include"] if x not in stored]
                     if miss: errs.append("证据缺少 " + ",".join(m.split(":")[-1] for m in miss))
+                    for c in e.get("evidence_must_exclude_if_content_lacks", []):
+                        if not any(w in s["content"] for w in c["keywords"]) and c["ref"] in stored:
+                            errs.append(f"正文已不含{c['keywords'][0]}，却仍保留证据 " + c["ref"].split(":")[-1])
                     lost = [k for k in e["content_keywords"] if not any(w in s["content"] for w in k)]
                     if lost: errs.append("正文丢了 " + "/".join(k[0] for k in lost))
                     note["正文"] = s["content"]
