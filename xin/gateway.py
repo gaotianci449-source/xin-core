@@ -9,7 +9,7 @@ WHITELIST = {"historical_claim": "对方提出关于过去的说法，需要核�
              "snapshot_conflict": "状态记录内部有矛盾，需要原始消息仲裁",
              "recall_request": "对方要求查看或复述以前的记录",
              "insufficient_snapshot": "状态记录不够回答涉及过去的问题，且没法靠问对方解决"}
-FIELDS = {"request_type": str, "claim": str, "entities": list, "time_expression": str, "time_range": dict, "keywords": list,
+FIELDS = {"request_type": str, "claim": str, "claim_to_verify": str, "entities": list, "time_expression": str, "time_range": dict, "keywords": list,
           "topic": str, "state_key": (str, type(None)), "verification_goal": str, "preferred_ref_ids": list, "clarification_needed": bool}
 BUDGET = {"max_items": 8, "max_chars": 1200, "widen_days": 1, "fallback_items": 5}
 
@@ -20,6 +20,7 @@ TOOL = {"type": "function", "function": {
     "parameters": {"type": "object", "required": list(FIELDS), "properties": {
         "request_type": {"type": "string", "enum": list(WHITELIST)},
         "claim": {"type": "string", "description": "需要核实的说法"},
+        "claim_to_verify": {"type": "string", "description": "忠实对齐对方原始问题的待核验主张，不放大、不缩小、不替换。例：对方问“我昨天不是跟你说过我要搬家吗”，写“对方是否在昨天的消息中明确表达过搬家意图”，不能改成“昨天是否谈过房租或住处”"},
         "entities": {"type": "array", "items": {"type": "string"}},
         "time_expression": {"type": "string", "description": "对方原话里的时间说法，如“昨天”“上周”，没有就空字符串"},
         "time_range": {"type": "object", "properties": {"start": {"type": ["string", "null"]}, "end": {"type": ["string", "null"]}}},
@@ -62,29 +63,28 @@ def _kw(evs, kws):
     return [e for e in evs if any(k in e["text"] for k in kws)] if kws else evs
 
 
-def _classify(evs, kws, rng, current_key, ids, base_relevant):
-    """命中状态：qualifying_hit / partial_match / non_qualifying_hit / no_match。硬性条件由程序校验。"""
-    if not evs:
-        return "no_match", [], []
-    # 一级（当前 ref）的事件本身就是状态的证据，视为相关；其余级别有关键词时按关键词判断相关性
-    rel = evs if base_relevant == "ref" else [e for e in evs if (kws and any(k in e["text"] for k in kws)) or (not kws and base_relevant)]
-    def hard_ok(e):
-        reasons = []
-        if e["id"] == current_key: reasons.append("是当前消息，不能替代历史")
-        if rng and not (rng["start_utc"] <= e["time"] < rng["end_utc"]): reasons.append("不在要求的时间范围内")
-        if ids and e["id"] not in ids: reasons.append("不是指定的事件 ID")
-        return reasons
-    qual = [e for e in rel if not hard_ok(e)]
-    part = [dict(e, why="；".join(hard_ok(e))) for e in rel if hard_ok(e)]
-    if qual: return "qualifying_hit", qual, part
-    if part: return "partial_match", [], part
-    return "non_qualifying_hit", [], []
+JUDGE_PROMPT = """你是检索执行器的证据判定环节，只判断候选消息与待核验主张的关系，不回答用户。
+对每条候选，标 supports（直接支持主张）/ refutes（直接反驳主张）/ background（只是背景、侧面相关、附带信息）/ unrelated（无关）。
+“没提到”不等于反驳；只有消息内容与主张无法同时成立才是 refutes。
+如果待核验主张本身模糊到无法证伪，claim_status 填 ambiguous；为空或不是可核验的说法，填 invalid；否则填 ok。
+只输出 JSON：{"claim_status":"ok|ambiguous|invalid","labels":[{"id":"...","label":"supports|refutes|background|unrelated","why":"一句话"}]}"""
 
 
-def execute(conn, run_id, req, dir_, current_key, now_iso, tz):
-    """返回 (给模型看的文本, 日志)。只有 qualifying_hit 才终止；其余继续下一级，直到预算或级数用完。"""
+def hard_check(e, rng, current_key, ids):
+    reasons = []
+    if e["id"] == current_key: reasons.append("是当前消息，不能替代历史")
+    if rng and not (rng["start_utc"] <= e["time"] < rng["end_utc"]): reasons.append("不在要求的时间范围内")
+    if ids and e["id"] not in ids: reasons.append("不是指定的事件 ID")
+    return reasons
+
+
+def execute(conn, run_id, req, dir_, current_key, now_iso, tz, judge=None, original_question=""):
+    """两阶段：候选召回（只缩小范围）→ 证据支撑判定（硬性条件由程序校验，语义由判定环节标注）。
+    只有 qualifying_hit（硬性条件全过 + 直接支持或反驳 + 无未解决冲突）才终止。"""
     log = {"request": req, "valid": True, "tiers": [], "hits": [], "returned": 0, "chars": 0, "stopped": None, "notes": [],
-           "time": {"time_expression": req.get("time_expression") if isinstance(req, dict) else None, "anchor": now_iso, "tz": tz, "resolved_time_range": None}}
+           "original_question": original_question, "claim_to_verify": req.get("claim_to_verify") if isinstance(req, dict) else None,
+           "time": {"time_expression": req.get("time_expression") if isinstance(req, dict) else None, "anchor": now_iso, "tz": tz, "resolved_time_range": None},
+           "judge_calls": 0, "judge_usage": [], "flags": []}
     errs = validate(req)
     if errs:
         log.update(valid=False, errors=errs)
@@ -92,8 +92,11 @@ def execute(conn, run_id, req, dir_, current_key, now_iso, tz):
     if req["clarification_needed"]:
         log["stopped"] = "clarify"
         return "你在请求里标了需要先澄清，按约定没有执行检索；请先向对方问清楚。", log
+    claim = req["claim_to_verify"].strip()
+    if not claim:
+        log.update(stopped="claim_invalid"); log["flags"].append("claim_invalid")
+        return "检索请求里没有可核验的主张（claim_to_verify 为空），没有执行检索；需要的话先向对方问清楚。", log
     kws = [k for k in req["keywords"] if k]
-    # 时间硬性条件
     rng = None
     tr = req["time_range"] or {}
     if tr.get("start") and tr.get("end"):
@@ -102,20 +105,52 @@ def execute(conn, run_id, req, dir_, current_key, now_iso, tz):
         rng = history.resolve(req["time_expression"], now_iso, tz)
         if not rng: log["notes"].append(f"时间说法无法解析：{req['time_expression']}")
     if rng: log["time"]["resolved_time_range"] = f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}（左闭右开，按自然日）"
-    all_refs = {r for s in dir_["states"] for r in s["evidence_ref_list"]}
+    all_refs = {r for x in dir_["states"] for r in x["evidence_ref_list"]}
     ids = set()
     for rid in req["preferred_ref_ids"]:
         if rid in all_refs: ids.add(rid)
         else: log["notes"].append(f"忽略不在当前 ref 内的 ID：{rid}")
-    qualifying, partial, context, stop = [], {}, [], None
-    def record(tier, scope, evs, base_relevant):
-        status, q, p = _classify(evs, kws, rng, current_key, ids, base_relevant)
-        log["tiers"].append({"tier": tier, "scope": scope, "returned": len(evs), "status": status,
-                             "basis": f"关键词{kws or '无'}；时间条件{'有' if rng else '无'}；指定ID{sorted(ids) or '无'}",
-                             "hard_fail": [(e["id"], e["why"]) for e in p]})
-        for e in p: partial.setdefault(e["id"], e)
-        return status, q
-    # 一级：当前 ref
+    labels = {}       # 判定缓存：id → (label, why)
+    qualifying, partial, background, stop = {}, {}, {}, None
+
+    def judge_all(evs):
+        todo = [e for e in evs if e["id"] not in labels]
+        if not todo: return "ok"
+        if judge is None:
+            for e in todo: labels[e["id"]] = ("background", "没有判定环节")
+            return "ok"
+        out, usage = judge(claim, original_question, todo)
+        log["judge_calls"] += 1; log["judge_usage"].append(usage)
+        for l in out.get("labels", []):
+            if l.get("id") in {e["id"] for e in todo}:
+                labels[l["id"]] = (l.get("label", "unrelated"), l.get("why", ""))
+        for e in todo: labels.setdefault(e["id"], ("unrelated", "判定环节未返回"))
+        return out.get("claim_status", "ok")
+
+    def tier(n, scope, evs):
+        nonlocal stop
+        evs = evs[:12]   # 每级候选上限
+        cs = judge_all(evs) if evs else "ok"
+        if cs in ("ambiguous", "invalid"):
+            log["flags"].append(f"claim_{cs}"); stop = f"claim_{cs}"
+            log["tiers"].append({"tier": n, "scope": scope, "candidates": len(evs), "status": f"claim_{cs}"}); return
+        q_new, detail = [], []
+        for e in evs:
+            lab, why = labels[e["id"]]
+            hf = hard_check(e, rng, current_key, ids)
+            detail.append((e["id"], lab, "；".join(hf) or "硬性条件通过"))
+            if lab in ("supports", "refutes"):
+                (partial if hf else qualifying).setdefault(e["id"], dict(e, label=lab, why=why, hard="；".join(hf)))
+                if not hf: q_new.append(e["id"])
+            elif lab == "background" and not hf:
+                background.setdefault(e["id"], dict(e, label=lab, why=why))
+        st = "qualifying_hit" if q_new else "partial_match" if any(d[1] in ("supports", "refutes") for d in detail) else \
+             "non_qualifying_hit" if any(d[1] == "background" for d in detail) else "no_match"
+        conflict = {"supports", "refutes"} <= {v["label"] for v in qualifying.values()}
+        if conflict and "conflicting_evidence" not in log["flags"]: log["flags"].append("conflicting_evidence")
+        log["tiers"].append({"tier": n, "scope": scope, "candidates": len(evs), "status": st, "conflict": conflict, "judged": detail})
+        if st == "qualifying_hit" and not conflict: stop = f"tier{n} qualifying_hit"
+
     refs = set(ids)
     sk = req["state_key"]
     if sk:
@@ -125,47 +160,42 @@ def execute(conn, run_id, req, dir_, current_key, now_iso, tz):
         else: log["notes"].append(f"state_key 不存在：{sk}")
     if refs:
         q = ",".join("?" * len(refs))
-        evs = _events(conn, run_id, f"event_unique_key IN ({q})", list(refs), None, now_iso)
-        status, qual = record(1, f"当前 ref {len(refs)} 个", evs, "ref")
-        if status == "qualifying_hit": qualifying, stop = qual, "tier1 qualifying_hit"
-    # 二级：时间区间
+        tier(1, f"当前 ref {len(refs)} 个", _events(conn, run_id, f"event_unique_key IN ({q})", list(refs), None, now_iso))
     if not stop and rng:
         evs = _events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?", (rng["start_utc"], rng["end_utc"]), current_key, now_iso)
-        status, qual = record(2, f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}", evs, True)
-        if status == "qualifying_hit": qualifying, stop = qual, "tier2 qualifying_hit"
-        elif status == "non_qualifying_hit": context = evs
-    # 三级：放宽（必须有关键词）
+        tier(2, f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}", evs)
     if not stop and rng and kws:
         fmt = "%Y-%m-%dT%H:%M:%SZ"
         s0 = (datetime.strptime(rng["start_utc"], fmt) - timedelta(days=BUDGET["widen_days"])).strftime(fmt)
         e0 = (datetime.strptime(rng["end_utc"], fmt) + timedelta(days=BUDGET["widen_days"])).strftime(fmt)
-        evs = _events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?", (s0, e0), current_key, now_iso)
-        status, qual = record(3, f"[{history.local(s0, tz)}, {history.local(e0, tz)})", evs, False)
-        if status == "qualifying_hit": qualifying, stop = qual, "tier3 qualifying_hit"
-    # 兜底：关键词
+        tier(3, f"[{history.local(s0, tz)}, {history.local(e0, tz)})", _kw(_events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?", (s0, e0), current_key, now_iso), kws))
     if not stop and kws:
-        evs = _kw(_events(conn, run_id, "1=1", (), current_key, now_iso), kws)[:BUDGET["fallback_items"]]
-        status, qual = record(4, "本 run 事件日志关键词召回", evs, False)
-        if status == "qualifying_hit": qualifying, stop = qual, "tier4 qualifying_hit"
-    log["stopped"] = stop or "级数用完，未找到满足全部硬性条件的证据"
-    # 组织回传：合格证据 > 相关但不满足硬性条件 > 时间段内的其他消息（上下文）
+        tier(4, "本 run 事件日志关键词召回", _kw(_events(conn, run_id, "1=1", (), current_key, now_iso), kws)[:BUDGET["fallback_items"]])
+    if not stop:
+        stop = "级数用完，存在未解决的证据冲突" if "conflicting_evidence" in log["flags"] else "级数用完，未找到满足全部条件的证据"
+    log["stopped"] = stop
     blocks, chars, used = [], 0, []
-    def add(title, evs, why=False):
+    def add(title, evs, extra):
         nonlocal chars
         lines = []
         for e in evs:
             if len(used) >= BUDGET["max_items"]: log["notes"].append("达到条数预算"); break
             mark = "（就是对方刚才这条消息）" if e["id"] == current_key else ""
-            line = f"- [{e['id']}] {history.local(e['time'], tz)} {e['who']}：{e['text']}{mark}" + (f"　← {e['why']}" if why and e.get("why") else "")
+            line = f"- [{e['id']}] {history.local(e['time'], tz)} {e['who']}：{e['text']}{mark}" + (f"　← {extra(e)}" if extra(e) else "")
             if chars + len(line) > BUDGET["max_chars"]: log["notes"].append("达到字数预算"); break
             lines.append(line); chars += len(line); used.append(e["id"])
         if lines: blocks.append(title + "\n" + "\n".join(lines))
-    add("满足全部条件的原始消息：", qualifying)
-    add("相关但不满足硬性条件的消息（不能当作对方说法的证据）：", list(partial.values()), True)
-    if not qualifying: add("要求的时间段内的其他消息（与核验目标无关，仅供参考）：", context)
-    log.update(hits=[e["id"] for e in qualifying], partial=list(partial), returned=len(used), chars=chars)
+    lab_cn = {"supports": "支持该主张", "refutes": "反驳该主张"}
+    add("能直接支持或反驳该主张、且满足全部条件的原始消息：", list(qualifying.values()), lambda e: lab_cn[e["label"]])
+    add("与主张直接相关、但不满足硬性条件的消息（不能作为该主张的证据）：", list(partial.values()), lambda e: f"{lab_cn[e['label']]}，但{e['hard']}")
+    if not qualifying: add("要求范围内的其他消息（只是背景，不能支持或反驳该主张）：", list(background.values()), lambda e: "")
+    log.update(hits=list(qualifying), partial=list(partial), background=list(background), returned=len(used), chars=chars)
     scope = "；".join(f"第{t['tier']}级 {t['scope']}→{t['status']}" for t in log["tiers"]) or "没有可执行的检索条件"
-    head = f"检索范围：{scope}。" + (f"时间按 {log['time']['resolved_time_range']} 解析。" if rng else "")
-    if qualifying:
-        return head + "\n" + "\n\n".join(blocks), log
-    return head + "在本次检索覆盖的范围内，没有找到满足全部条件的原始消息；范围之外的情况无法确认，也不要推测原因。" + ("\n" + "\n\n".join(blocks) if blocks else ""), log
+    head = f"待核验主张：{claim}。检索范围：{scope}。" + (f"时间按 {log['time']['resolved_time_range']} 解析。" if rng else "") + f"终止原因：{stop}。"
+    if stop.startswith("claim_"):
+        return head + "这个主张不够明确，无法核验，没有继续扩大检索；需要的话先向对方问清楚。", log
+    if "conflicting_evidence" in log["flags"]:
+        head += "已收集的证据之间存在直接矛盾，不能据此给出确定结论。"
+    elif not qualifying:
+        head += "在本次检索覆盖的范围内，没有找到能支持或反驳该主张的原始消息；范围之外的情况无法确认，也不要推测原因。"
+    return head + ("\n" + "\n\n".join(blocks) if blocks else ""), log
