@@ -8,5 +8,8 @@
  "max_tokens": 16000,
  "timeout_s": 180,
  "max_attempts": 3,
- "response_format": null
+ "response_format": {
+  "type": "json_object"
+ },
+ "_E0结果": "2026-11-27 实测：json_schema 不支持（400 unavailable）；json_object 可用并通过校验，按契约 9.4 退回 json_object + 程序校验"
 }
