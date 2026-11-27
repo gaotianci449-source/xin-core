@@ -8,7 +8,7 @@ from xin import db, engine
 from xin.models import DeepSeekModel
 from run_evidence import Recording
 
-AT_HOME = re.compile(r"旺财[^。；]*(还在家|在家里|回家|回来了|接回)")
+AT_HOME = re.compile(r"旺财[^。；]*(还在家|仍在家|回家|回来了|接回)")  # 不用“在家里”：会误中“现在家里只有煤球”
 
 def short(refs):
     return [r.split(":")[-1] for r in refs]
