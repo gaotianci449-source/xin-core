@@ -20,13 +20,17 @@ def to_utc_iso(dt):
 
 def resolve(text, msg_time_iso, tz_name):
     """返回 None，或 {phrase, tz, field, start_local, end_local, start_utc, end_utc}"""
-    days, phrase = parse_days_ago(text)
-    if days is None:
-        return None
     tz = ZoneInfo(tz_name)
     now_local = datetime.strptime(msg_time_iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).astimezone(tz)
-    day = (now_local - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
-    end = day + timedelta(days=1)
+    if "上周" in text or "上星期" in text:
+        monday = (now_local - timedelta(days=now_local.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day, end, phrase = monday, monday + timedelta(days=7), "上周"
+    else:
+        days, phrase = parse_days_ago(text)
+        if days is None:
+            return None
+        day = (now_local - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = day + timedelta(days=1)
     return {"phrase": phrase, "tz": tz_name, "field": "消息发生时间（事件原文 time）",
             "start_local": day.strftime("%Y-%m-%d %H:%M"), "end_local": end.strftime("%Y-%m-%d %H:%M"),
             "start_utc": to_utc_iso(day), "end_utc": to_utc_iso(end)}
