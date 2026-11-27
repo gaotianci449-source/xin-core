@@ -54,9 +54,11 @@ def api(params, messages, tools=None):
     raise RuntimeError(f"调用失败：{last}")
 
 def aux_json(params, system, user):
-    """执行器判定 / 测试侧预审用：不开思考，要求 JSON。"""
-    body = {"model": params["model"], "max_tokens": 4000, "response_format": {"type": "json_object"}, "thinking": {"type": "disabled"},
+    """执行器判定 / 测试侧预审用：开思考（与回复模型同强度），要求 JSON。"""
+    # 判定环节直接决定 O 组拿到什么证据，属于被测系统的一部分：与回复模型同样开思考、同强度
+    body = {"model": params["model"], "max_tokens": 16000, "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    if params.get("reasoning_effort"): body["reasoning_effort"] = params["reasoning_effort"]
     req = urllib.request.Request(params["base_url"].rstrip("/") + "/chat/completions", data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json", "Authorization": "Bearer " + os.environ[params["api_key_env"]]})
     last = None
