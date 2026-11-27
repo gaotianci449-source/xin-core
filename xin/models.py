@@ -25,13 +25,14 @@ class MockModel:
         return json.dumps(self.output, ensure_ascii=False)
 
 
-PROMPT_VERSION = "b-layer-v2"  # v2：加主题粒度说明（试运行后，正式评估前）
+PROMPT_VERSION = "b-layer-v3"  # v2：主题粒度；v3：重复确认 keep、语义变化才 write（试运行收口，2026-11-27）
 SYSTEM = """你负责维护一份关于对话对象的状态记录。每次会收到：当前事件、之前的聊天、现有状态目录、证据原文。
 判断当前事件对状态记录意味着什么，只输出一个 JSON 对象：
 {"result": "keep|write|conflict", "candidates": [...], "reason": "简短理由"}
 每个候选：{"state_key": "...", "is_new": true/false, "status_tag": "valid|pending|conflict", "content": "一句话陈述", "conflict_with": [state_id...], "evidence_ref_list": [event_unique_key...]}
 规则：
-- keep：没有新信息，candidates 为空。
+- keep：没有新信息，candidates 为空。纯重复确认、同义改写、只是附和或表态，都算 keep，即使措辞和已有状态不同。
+- 判断依据是状态的意思有没有变化，不是字面是否相同：新增了时间、有效期、范围、前提、约束或补充事实，或者更正、更新了原来的内容，才算 write。比如已有“在深圳上班”，“还在深圳 老地方”是 keep；“还在深圳 至少待到年底”加了时间约束，是 write。
 - write：新增状态，status_tag 只能是 valid（确定）或 pending（不确定、可能、还没定）。
 - conflict：与目录里已有状态矛盾且没有说明变化原因；新候选 status_tag 为 conflict，conflict_with 填目录里对应的 state_id。说明了原因或时间的变化是更新，用 write。
 - 同一主题必须使用目录里已有的 state_key，原样照抄，is_new=false；目录里没有的主题才新建，is_new=true，key 用小写英文、数字、下划线和点。
