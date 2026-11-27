@@ -1,0 +1,12 @@
+{
+ "_说明": "E1 启动前固定的 API 参数；E0 实测后再定 response_format，正式评估开始后不得修改",
+ "model": "deepseek-flash",
+ "base_url": "https://api.deepseek.com",
+ "api_key_env": "MODEL_API_KEY",
+ "thinking": true,
+ "reasoning_effort": "high",
+ "max_tokens": 16000,
+ "timeout_s": 180,
+ "max_attempts": 3,
+ "response_format": null
+}

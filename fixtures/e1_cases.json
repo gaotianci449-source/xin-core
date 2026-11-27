@@ -731,10 +731,22 @@
       "attempts": 3,
       "result": "write",
       "current_valid": {
-       "akai.sleep": 1
+       "$NEW1": 1
       },
       "event_log": "write",
-      "failure_log_entries": 2
+      "failure_log_entries": 2,
+      "candidates": [
+       {
+        "state_key": "$NEW1",
+        "is_new": true,
+        "status_tag": "valid",
+        "state_version": 1,
+        "meaning": "一般凌晨一点才睡"
+       }
+      ],
+      "evidence_must_include": [
+       "e1-v1:c6:s1"
+      ]
      }
     },
     {
@@ -752,7 +764,7 @@
       "duplicate": true,
       "new_rows": 0,
       "current_valid": {
-       "akai.sleep": 1
+       "$NEW1": 1
       }
      }
     },
@@ -787,7 +799,7 @@
       "main_db_event_log": "none",
       "failure_log_entries": 3,
       "current_valid": {
-       "akai.sleep": 1
+       "$NEW1": 1
       }
      }
     },
@@ -827,7 +839,7 @@
       "main_db_event_log": "none",
       "failure_log_entries": 1,
       "current_valid": {
-       "akai.sleep": 1
+       "$NEW1": 1
       }
      }
     }
