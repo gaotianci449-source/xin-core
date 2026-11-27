@@ -117,9 +117,9 @@ def execute(conn, run_id, req, dir_, current_key, now_iso, tz, judge=None, origi
     tr = req["time_range"] or {}
     if tr.get("start") or tr.get("end"):
         s_utc, e_utc = norm_time(tr.get("start"), tz), norm_time(tr.get("end"), tz)
+        if e_utc and len(str(tr.get("end")).strip()) == 10:   # 只给日期的结束日，按当天结束（左闭右开取次日 00:00）
+            e_utc = (datetime.strptime(e_utc, "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         if s_utc and e_utc and s_utc < e_utc:
-            if len(str(tr.get("end")).strip()) == 10:   # 只给日期的结束日，按当天结束（左闭右开取次日 00:00）
-                e_utc = (datetime.strptime(e_utc, "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
             rng = {"start_utc": s_utc, "end_utc": e_utc, "start_local": history.local(s_utc, tz), "end_local": history.local(e_utc, tz), "tz": tz + "（模型给出的区间）"}
         else:
             log["notes"].append(f"time_range 无法解析或不完整：{tr}，改用 time_expression")
