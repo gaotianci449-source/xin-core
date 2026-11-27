@@ -9,7 +9,8 @@
   "expected_directory 为 from_db 的步骤：用前序步骤的预期结果推出预期目录，再与程序实际组装的比对。",
   "第二层每条用例从 initial_db 独立开始；c6 只在第一层（Mock）跑。",
   "场景 B（同一事件产生两条互相冲突的新状态）不在契约要求的 6 类里，本版未覆盖。",
-  "试运行后修订（2026-11-27）：c2 原消息“被我对象带偏的”含两条新信息（还有“有对象”），改为只含一条。"
+  "试运行后修订（2026-11-27）：c2 原消息“被我对象带偏的”含两条新信息（还有“有对象”），改为只含一条。",
+  "v5 修订（2026-11-27）：status_tag 判候选整体资格；c3 改为 write + valid 完整快照，新增 c3b 孤立传闻 → pending。“pending 不覆盖已有 valid”的程序机制由第一层与单元测试验证。"
  ],
  "cases": [
   {
@@ -245,7 +246,7 @@
   },
   {
    "case_id": "c3",
-   "purpose": "没确定的消息 → pending；原来的 valid 仍是当前有效状态",
+   "purpose": "已有事实 + 未定的计划 → 完整快照，write + valid；不确定性写在正文里",
    "covers": [
     3
    ],
@@ -318,15 +319,15 @@
        {
         "state_key": "akai.work_city",
         "is_new": false,
-        "status_tag": "pending",
-        "content": "阿凯年后可能被调去成都工作，尚未确定。",
+        "status_tag": "valid",
+        "content": "阿凯目前在深圳南山上班，年后可能被调去成都，还没定。",
         "conflict_with": [],
         "evidence_ref_list": [
          "e1-v1:c3:s1"
         ]
        }
       ],
-      "reason": "只是可能。"
+      "reason": "在深圳仍成立，调动是未定的计划，写进完整快照。"
      },
      "expect": {
       "result": "write",
@@ -334,18 +335,82 @@
        {
         "state_key": "akai.work_city",
         "is_new": false,
-        "status_tag": "pending",
+        "status_tag": "valid",
         "state_version": 2,
-        "meaning": "年后可能调去成都，未定"
+        "meaning": "目前在深圳南山上班；年后可能调去成都，未定（两部分都要有）"
        }
       ],
       "conflict_links": [],
       "current_valid": {
-       "akai.work_city": 1
+       "akai.work_city": 2
       },
       "event_log": "write",
       "evidence_must_include": [
        "e1-v1:c3:s1"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "case_id": "c3b",
+   "purpose": "孤立传闻、信息不足 → pending；保留不确定性描述；没有 valid 时当前有效状态为空",
+   "covers": [
+    3
+   ],
+   "initial_db": {
+    "events": [],
+    "states": [],
+    "conflict_links": []
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "event": {
+      "event_unique_key": "e1-v1:c3b:s1",
+      "sender": "阿凯",
+      "time": "2026-11-27T12:25:00Z",
+      "session": "qq-private-akai",
+      "text": "听同事瞎传说我们公司要搬去前海 也不知道真的假的"
+     },
+     "chat_context": [],
+     "expected_directory": {
+      "states": [],
+      "conflict_links": [],
+      "current_valid": {}
+     },
+     "mock_output": {
+      "result": "write",
+      "candidates": [
+       {
+        "state_key": "akai.company_location",
+        "is_new": true,
+        "status_tag": "pending",
+        "content": "阿凯听同事传言公司可能搬去前海，真假不明。",
+        "conflict_with": [],
+        "evidence_ref_list": [
+         "e1-v1:c3b:s1"
+        ]
+       }
+      ],
+      "reason": "只是传闻，他自己也不确定。"
+     },
+     "expect": {
+      "result": "write",
+      "candidates": [
+       {
+        "state_key": "$NEW1",
+        "is_new": true,
+        "status_tag": "pending",
+        "state_version": 1,
+        "meaning": "同事传言公司要搬去前海，真假不明"
+       }
+      ],
+      "conflict_links": [],
+      "current_valid": {},
+      "event_log": "write",
+      "evidence_must_include": [
+       "e1-v1:c3b:s1"
       ]
      }
     }
