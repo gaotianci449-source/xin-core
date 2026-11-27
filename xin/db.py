@@ -5,7 +5,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS event_log (           -- 事件处理日志：成功处理路径必写
   run_id TEXT NOT NULL,
   event_unique_key TEXT NOT NULL,
-  result TEXT NOT NULL CHECK (result IN ('keep','write','conflict','seed')),
+  result TEXT NOT NULL CHECK (result IN ('keep','write','conflict','seed','msg','reply')),  -- msg: 未经 B 层的消息；reply: 他自己发出的回复（只存不记状态）
   payload TEXT NOT NULL,                          -- 事件原文（JSON），供证据回看
   reason TEXT,
   created_at TEXT NOT NULL,
