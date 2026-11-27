@@ -74,9 +74,11 @@ def run_turns(case, group, conn, run_id, hist, params, proto):
         if group == "O": system += "\n\n关于对方，你此前记下的状态记录如下（只来自对方说过的话，可能不全）：\n" + snapshot(dir_, True) + "\n\n" + O_NOTE + (O_JSON if proto == "json" else "")
         msgs = [{"role": "system", "content": system}] + [{"role": "assistant" if m["who"] == "你" else "user", "content": m["text"]} for m in chat]
         calls, usage, text = [], [], None
-        for step in range(3):
-            use_tools = group == "O" and proto == "tools" and step < 2
+        for step in range(5):
+            use_tools = group == "O" and proto == "tools"   # 工具定义始终保留：去掉会让模型把调用标记当成文字输出
             m, u = api(params, msgs, [gateway.TOOL] if use_tools else None); usage.append(u)
+            if "DSML" in (m.get("content") or ""):
+                raise RuntimeError("模型把工具调用标记输出成了文字（执行器协议故障）")
             req = None
             if m.get("tool_calls"):
                 tc = m["tool_calls"][0]
@@ -85,7 +87,7 @@ def run_turns(case, group, conn, run_id, hist, params, proto):
                 am = {"role": "assistant", "content": m.get("content") or "", "tool_calls": m["tool_calls"]}
                 if m.get("reasoning_content"): am["reasoning_content"] = m["reasoning_content"]
                 msgs.append(am)
-            elif group == "O" and proto == "json" and step < 2:
+            elif group == "O" and proto == "json" and len(calls) < 2:
                 c = (m.get("content") or "").strip()
                 try:
                     j = json.loads(c[c.find("{"):c.rfind("}") + 1]) if "retrieval_request" in c else None
@@ -94,10 +96,14 @@ def run_turns(case, group, conn, run_id, hist, params, proto):
                 if req is not None: msgs.append({"role": "assistant", "content": c})
             if req is None:
                 text = (m.get("content") or "").strip(); break
-            before = conn.execute("SELECT COUNT(*) FROM states").fetchone()[0]
-            result, glog = gateway.execute(conn, run_id, req, dir_, key, turn["time"], tz) if "_parse_error" not in req else ("请求无法解析，没有执行检索。", {"valid": False, "errors": [req["_parse_error"]], "hits": [], "returned": 0, "chars": 0})
-            glog["polluted"] = conn.execute("SELECT COUNT(*) FROM states").fetchone()[0] != before
-            calls.append(glog)
+            if len(calls) >= 2:   # 本句检索次数已达上限：不执行，告诉模型直接回复
+                result = "本句检索次数已达上限（2 次），没有执行这次检索。请根据已经拿到的结果直接回复对方。"
+                calls.append({"valid": False, "errors": ["超过检索次数上限"], "over_limit": True, "hits": [], "returned": 0, "chars": 0, "polluted": False})
+            else:
+                before = conn.execute("SELECT COUNT(*) FROM states").fetchone()[0]
+                result, glog = gateway.execute(conn, run_id, req, dir_, key, turn["time"], tz) if "_parse_error" not in req else ("请求无法解析，没有执行检索。", {"valid": False, "errors": [req["_parse_error"]], "hits": [], "returned": 0, "chars": 0})
+                glog["polluted"] = conn.execute("SELECT COUNT(*) FROM states").fetchone()[0] != before
+                calls.append(glog)
             if proto == "tools" and m.get("tool_calls"):
                 msgs.append({"role": "tool", "tool_call_id": m["tool_calls"][0]["id"], "content": result})
                 for extra in m["tool_calls"][1:]:
@@ -131,7 +137,8 @@ def auto(case, rows):
     for t, exp in zip(a["triggered"], case["expect_trigger"]):
         a["trigger_eval"].append("合法触发" if t and exp else "漏触发" if exp and not t else "误触发" if t and not exp else "正确不触发")
     calls = [c for r in rows for c in r["calls"]]
-    a["invalid_requests"] = sum(1 for c in calls if not c.get("valid"))
+    a["invalid_requests"] = sum(1 for c in calls if not c.get("valid") and not c.get("over_limit"))
+    a["over_limit_requests"] = sum(1 for c in calls if c.get("over_limit"))
     hits = {h for c in calls for h in c.get("hits", []) + c.get("partial", [])}  # 证据命中：合格或相关但不合格均算找到目标事件
     a["target_hit"] = (all(t in hits for t in case["target_ids"]) if case["target_ids"] else None) if calls else None
     a["budget_ok"] = all(c.get("returned", 0) <= gateway.BUDGET["max_items"] and c.get("chars", 0) <= gateway.BUDGET["max_chars"] for c in calls)
