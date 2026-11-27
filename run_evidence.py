@@ -57,17 +57,24 @@ def main(mode="pilot", fixture="fixtures/e2a1_evidence.json"):
                     for c in e.get("evidence_must_exclude_if_content_lacks", []):
                         if not any(w in s["content"] for w in c["keywords"]) and c["ref"] in stored:
                             errs.append(f"正文已不含{c['keywords'][0]}，却仍保留证据 " + c["ref"].split(":")[-1])
+                    if "evidence_exact" in e and sorted(stored) != e["evidence_exact"]:
+                        errs.append("引用集合应为 " + ",".join(x.split(":")[-1] for x in e["evidence_exact"]) + "，实际 " + ",".join(x.split(":")[-1] for x in stored))
                     lost = [k for k in e["content_keywords"] if not any(w in s["content"] for w in k)]
                     if lost: errs.append("正文丢了 " + "/".join(k[0] for k in lost))
                     note["正文"] = s["content"]
             conn.close()
             ok = not errs; hits += ok
             print(f"{case['case_id']} 第{i}轮 {'通过' if ok else '失败：' + '；'.join(errs)}")
-            report.append({"case": case["case_id"], "round": i, "ok": ok, "errors": errs, **note})
+            report.append({"case": case["case_id"], "group": case.get("group"), "round": i, "prompt": params.get("prompt_version"), "ok": ok, "errors": errs, "正文语义判定标准": case.get("semantic_check"), **note})
         line = f"{case['case_id']}: {hits}/{n}"
         if mode == "formal": line += "　达标" if hits >= fx["pass_rate"] * n else "　未达标"
         print("  → " + line)
     json.dump(report, open(os.path.join(out, "report.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    if any(r.get("正文语义判定标准") for r in report):
+        print("\nA 组：正文语义（人工判定）")
+        for r in report:
+            if r.get("正文"):
+                print(f"  {r['case']} r{r['round']}｜{r['正文']}｜引用 {[x.split(':')[-1] for x in r['入库']]}")
     print(f"\n结果：{out}/report.json（含原始返回与入库对照）；原始返回：{out}/raw.jsonl")
 
 if __name__ == "__main__":
