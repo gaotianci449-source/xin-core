@@ -108,8 +108,22 @@ def run_turns(case, group, conn, run_id, hist, params, proto):
         conn.execute("INSERT INTO event_log VALUES (?,?,?,?,?,?)", (run_id, f"{run_id}:a{ti}", "reply", json.dumps(
             {"event_unique_key": f"{run_id}:a{ti}", "sender": "你", "time": turn["time"][:-3] + "20Z", "session": "stage1", "text": text}, ensure_ascii=False), None, db.now()))
         rows.append({"turn": ti, "user": turn["text"], "reply": text, "calls": calls,
-                     "prompt_tokens": sum(u.get("prompt_tokens", 0) for u in usage), "completion_tokens": sum(u.get("completion_tokens", 0) for u in usage)})
+                     "usage_per_call": [{"prompt_tokens": u.get("prompt_tokens", 0), "completion_tokens": u.get("completion_tokens", 0)} for u in usage],
+                     "prompt_tokens": sum(u.get("prompt_tokens", 0) for u in usage), "completion_tokens": sum(u.get("completion_tokens", 0) for u in usage),
+                     "cost_tags": {"tool_schema": group == "O" and proto == "tools", "model_calls": len(usage), "retrieval_requests": len(calls),
+                                   "invalid_requests": sum(1 for c in calls if not c.get("valid")), "returned_items": sum(c.get("returned", 0) for c in calls),
+                                   "returned_chars": sum(c.get("chars", 0) for c in calls)}})
     return rows
+
+ATTRIB = ("没存上", "没记上", "丢了", "没保存", "消失", "漏了", "没同步", "没收到")
+
+def flags(rows):
+    f = []
+    for r in rows:
+        if not r["reply"].strip(): f.append(f"第{r['turn']}句空回复")
+        hit = [w for w in ATTRIB if w in r["reply"]]
+        if hit: f.append(f"第{r['turn']}句无依据归因候选：{hit}")
+    return f
 
 def auto(case, rows):
     a = {"triggered": [bool(r["calls"]) for r in rows]}
@@ -118,7 +132,7 @@ def auto(case, rows):
         a["trigger_eval"].append("合法触发" if t and exp else "漏触发" if exp and not t else "误触发" if t and not exp else "正确不触发")
     calls = [c for r in rows for c in r["calls"]]
     a["invalid_requests"] = sum(1 for c in calls if not c.get("valid"))
-    hits = {h for c in calls for h in c.get("hits", [])}
+    hits = {h for c in calls for h in c.get("hits", []) + c.get("partial", [])}  # 证据命中：合格或相关但不合格均算找到目标事件
     a["target_hit"] = (all(t in hits for t in case["target_ids"]) if case["target_ids"] else None) if calls else None
     a["budget_ok"] = all(c.get("returned", 0) <= gateway.BUDGET["max_items"] and c.get("chars", 0) <= gateway.BUDGET["max_chars"] for c in calls)
     a["polluted"] = any(c.get("polluted") for c in calls)
@@ -147,15 +161,22 @@ def main(mode="pilot", proto="tools"):
                     rows, status = [], f"无效（执行器/配置故障）：{e}"
                 conn.close()
                 a = auto(case, rows) if (rows and g == "O") else {}
-                results.append({"case": case["case_id"], "group": g, "round": rnd, "status": status, "turns": rows, "auto": a})
+                fl = flags(rows) if rows else []
+                results.append({"case": case["case_id"], "group": g, "round": rnd, "status": status, "turns": rows, "auto": a, "flags": fl,
+                                "note": ("初筛：D 组召回失败仅作风险记录" if (g == "D" and mode == "pilot") else None)})
                 tag = f"{case['case_id']} {g}组 第{rnd}轮"
-                print(tag + (f"　{'；'.join(a['trigger_eval'])}　命中目标:{a['target_hit']}　非法请求:{a['invalid_requests']}　污染:{a['polluted']}" if a else "") + ("" if status == "ok" else "　" + status))
+                print(tag + (f"　{'；'.join(a['trigger_eval'])}　命中目标:{a['target_hit']}　非法请求:{a['invalid_requests']}　污染:{a['polluted']}" if a else "") + (f"　⚑{'；'.join(fl)}" if fl else "") + ("" if status == "ok" else "　" + status))
                 for r in rows:
                     if case["case_id"] == "Q9" or r["turn"] == case["judge_turn"]:
                         review.append(f"- {g}组 r{rnd} 第{r['turn']}句：{r['reply']}")
                         for c in r["calls"]:
                             req = c.get("request", {})
-                            review.append(f"    · 检索请求 {req.get('request_type')}｜时间「{req.get('time_expression')}」｜关键词 {req.get('keywords')}｜state_key {req.get('state_key')} → {c.get('stopped')}，返回 {c.get('returned')} 条 {c.get('hits')}" if c.get("valid") else f"    · 非法请求：{c.get('errors')}")
+                            review.append(f"    · 检索请求 {req.get('request_type')}｜时间「{req.get('time_expression')}」→ {c.get('time',{}).get('resolved_time_range')}｜关键词 {req.get('keywords')}｜state_key {req.get('state_key')}" if c.get("valid") else f"    · 非法请求：{c.get('errors')}")
+                            if c.get("valid"):
+                                for t in c["tiers"]:
+                                    review.append(f"        第{t['tier']}级 {t['scope']}：{t['status']}（返回 {t['returned']}）" + (f" 硬性条件不符 {t['hard_fail']}" if t["hard_fail"] else ""))
+                                review.append(f"        停止：{c.get('stopped')}；合格证据 {c.get('hits')}；相关但不合格 {c.get('partial')}")
+                        if r["turn"] and not r["reply"].strip(): review.append("    · ⚑ 空回复（有效模型行为）")
                 if status != "ok": review.append(f"- {g}组 r{rnd}：{status}")
         review.append("")
     json.dump(results, open(os.path.join(out, "results.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)

@@ -62,9 +62,29 @@ def _kw(evs, kws):
     return [e for e in evs if any(k in e["text"] for k in kws)] if kws else evs
 
 
+def _classify(evs, kws, rng, current_key, ids, base_relevant):
+    """命中状态：qualifying_hit / partial_match / non_qualifying_hit / no_match。硬性条件由程序校验。"""
+    if not evs:
+        return "no_match", [], []
+    # 一级（当前 ref）的事件本身就是状态的证据，视为相关；其余级别有关键词时按关键词判断相关性
+    rel = evs if base_relevant == "ref" else [e for e in evs if (kws and any(k in e["text"] for k in kws)) or (not kws and base_relevant)]
+    def hard_ok(e):
+        reasons = []
+        if e["id"] == current_key: reasons.append("是当前消息，不能替代历史")
+        if rng and not (rng["start_utc"] <= e["time"] < rng["end_utc"]): reasons.append("不在要求的时间范围内")
+        if ids and e["id"] not in ids: reasons.append("不是指定的事件 ID")
+        return reasons
+    qual = [e for e in rel if not hard_ok(e)]
+    part = [dict(e, why="；".join(hard_ok(e))) for e in rel if hard_ok(e)]
+    if qual: return "qualifying_hit", qual, part
+    if part: return "partial_match", [], part
+    return "non_qualifying_hit", [], []
+
+
 def execute(conn, run_id, req, dir_, current_key, now_iso, tz):
-    """返回 (给模型看的文本, 日志)。"""
-    log = {"request": req, "valid": True, "tiers": [], "hits": [], "returned": 0, "chars": 0, "stopped": None, "notes": []}
+    """返回 (给模型看的文本, 日志)。只有 qualifying_hit 才终止；其余继续下一级，直到预算或级数用完。"""
+    log = {"request": req, "valid": True, "tiers": [], "hits": [], "returned": 0, "chars": 0, "stopped": None, "notes": [],
+           "time": {"time_expression": req.get("time_expression") if isinstance(req, dict) else None, "anchor": now_iso, "tz": tz, "resolved_time_range": None}}
     errs = validate(req)
     if errs:
         log.update(valid=False, errors=errs)
@@ -72,63 +92,80 @@ def execute(conn, run_id, req, dir_, current_key, now_iso, tz):
     if req["clarification_needed"]:
         log["stopped"] = "clarify"
         return "你在请求里标了需要先澄清，按约定没有执行检索；请先向对方问清楚。", log
-    kws = req["keywords"]
-    hits, tier = [], None
-    # 一级：当前 ref 内精准召回
-    refs = set()
+    kws = [k for k in req["keywords"] if k]
+    # 时间硬性条件
+    rng = None
+    tr = req["time_range"] or {}
+    if tr.get("start") and tr.get("end"):
+        rng = {"start_utc": tr["start"], "end_utc": tr["end"], "start_local": tr["start"], "end_local": tr["end"], "tz": "UTC"}
+    elif req["time_expression"]:
+        rng = history.resolve(req["time_expression"], now_iso, tz)
+        if not rng: log["notes"].append(f"时间说法无法解析：{req['time_expression']}")
+    if rng: log["time"]["resolved_time_range"] = f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}（左闭右开，按自然日）"
     all_refs = {r for s in dir_["states"] for r in s["evidence_ref_list"]}
+    ids = set()
     for rid in req["preferred_ref_ids"]:
-        if rid in all_refs: refs.add(rid)
+        if rid in all_refs: ids.add(rid)
         else: log["notes"].append(f"忽略不在当前 ref 内的 ID：{rid}")
+    qualifying, partial, context, stop = [], {}, [], None
+    def record(tier, scope, evs, base_relevant):
+        status, q, p = _classify(evs, kws, rng, current_key, ids, base_relevant)
+        log["tiers"].append({"tier": tier, "scope": scope, "returned": len(evs), "status": status,
+                             "basis": f"关键词{kws or '无'}；时间条件{'有' if rng else '无'}；指定ID{sorted(ids) or '无'}",
+                             "hard_fail": [(e["id"], e["why"]) for e in p]})
+        for e in p: partial.setdefault(e["id"], e)
+        return status, q
+    # 一级：当前 ref
+    refs = set(ids)
     sk = req["state_key"]
     if sk:
         cur = dir_["current_valid"].get(sk)
-        st = [s for s in dir_["states"] if s["state_key"] == sk and (cur is None or s["state_version"] == cur)]
+        st = [x for x in dir_["states"] if x["state_key"] == sk and (cur is None or x["state_version"] == cur)]
         if st: refs |= set(st[-1]["evidence_ref_list"])
         else: log["notes"].append(f"state_key 不存在：{sk}")
     if refs:
         q = ",".join("?" * len(refs))
         evs = _events(conn, run_id, f"event_unique_key IN ({q})", list(refs), None, now_iso)
-        log["tiers"].append({"tier": 1, "scope": f"当前 ref {len(refs)} 个", "found": len(evs)})
-        if evs: hits, tier = evs, 1
-    # 二级：给定时间区间
-    rng = None
-    if not hits:
-        tr = req["time_range"] or {}
-        if tr.get("start") and tr.get("end"):
-            rng = {"start_utc": tr["start"], "end_utc": tr["end"], "phrase": "模型给出的区间", "start_local": tr["start"], "end_local": tr["end"], "tz": "UTC"}
-        elif req["time_expression"]:
-            rng = history.resolve(req["time_expression"], now_iso, tz)
-            if not rng: log["notes"].append(f"时间说法无法解析：{req['time_expression']}")
-        if rng:
-            evs = _events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?",
-                          (rng["start_utc"], rng["end_utc"]), current_key, now_iso)
-            m = _kw(evs, kws)
-            log["tiers"].append({"tier": 2, "scope": f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}", "in_range": len(evs), "found": len(m)})
-            if m: hits, tier = m, 2
-    # 三级：放宽时间窗口（前后各 widen_days 天，必须有关键词）
-    if not hits and rng and kws:
+        status, qual = record(1, f"当前 ref {len(refs)} 个", evs, "ref")
+        if status == "qualifying_hit": qualifying, stop = qual, "tier1 qualifying_hit"
+    # 二级：时间区间
+    if not stop and rng:
+        evs = _events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?", (rng["start_utc"], rng["end_utc"]), current_key, now_iso)
+        status, qual = record(2, f"[{rng['start_local']}, {rng['end_local']}) {rng['tz']}", evs, True)
+        if status == "qualifying_hit": qualifying, stop = qual, "tier2 qualifying_hit"
+        elif status == "non_qualifying_hit": context = evs
+    # 三级：放宽（必须有关键词）
+    if not stop and rng and kws:
         fmt = "%Y-%m-%dT%H:%M:%SZ"
-        s = (datetime.strptime(rng["start_utc"], fmt) - timedelta(days=BUDGET["widen_days"])).strftime(fmt)
-        e = (datetime.strptime(rng["end_utc"], fmt) + timedelta(days=BUDGET["widen_days"])).strftime(fmt)
-        evs = _kw(_events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?", (s, e), current_key, now_iso), kws)
-        log["tiers"].append({"tier": 3, "scope": f"[{history.local(s, tz)}, {history.local(e, tz)})", "found": len(evs)})
-        if evs: hits, tier = evs, 3
-    # 兜底：关键词召回（仅有关键词时；限量）
-    if not hits and kws:
+        s0 = (datetime.strptime(rng["start_utc"], fmt) - timedelta(days=BUDGET["widen_days"])).strftime(fmt)
+        e0 = (datetime.strptime(rng["end_utc"], fmt) + timedelta(days=BUDGET["widen_days"])).strftime(fmt)
+        evs = _events(conn, run_id, "json_extract(payload,'$.time') >= ? AND json_extract(payload,'$.time') < ?", (s0, e0), current_key, now_iso)
+        status, qual = record(3, f"[{history.local(s0, tz)}, {history.local(e0, tz)})", evs, False)
+        if status == "qualifying_hit": qualifying, stop = qual, "tier3 qualifying_hit"
+    # 兜底：关键词
+    if not stop and kws:
         evs = _kw(_events(conn, run_id, "1=1", (), current_key, now_iso), kws)[:BUDGET["fallback_items"]]
-        log["tiers"].append({"tier": 4, "scope": "本 run 事件日志关键词召回", "found": len(evs)})
-        if evs: hits, tier = evs, 4
-    hits = hits[:BUDGET["max_items"]]
-    lines, chars = [], 0
-    for h in hits:
-        mark = "（就是对方刚才这条消息）" if h["id"] == current_key else ""
-        line = f"- [{h['id']}] {history.local(h['time'], tz)} {h['who']}：{h['text']}{mark}"
-        if chars + len(line) > BUDGET["max_chars"]:
-            log["notes"].append("达到字数预算，截断"); break
-        lines.append(line); chars += len(line)
-    log.update(hits=[h["id"] for h in hits[:len(lines)]], returned=len(lines), chars=chars, stopped=f"tier{tier}" if tier else "not_found")
-    scope = "；".join(f"第{t['tier']}级 {t['scope']}：{t['found']} 条" for t in log["tiers"]) or "没有可执行的检索条件"
-    if not lines:
-        return f"检索范围：{scope}。在这些范围内没有找到相关的原始消息。范围之外的记录无法确认。", log
-    return f"检索范围：{scope}。找到的原始消息（第{tier}级）：\n" + "\n".join(lines), log
+        status, qual = record(4, "本 run 事件日志关键词召回", evs, False)
+        if status == "qualifying_hit": qualifying, stop = qual, "tier4 qualifying_hit"
+    log["stopped"] = stop or "级数用完，未找到满足全部硬性条件的证据"
+    # 组织回传：合格证据 > 相关但不满足硬性条件 > 时间段内的其他消息（上下文）
+    blocks, chars, used = [], 0, []
+    def add(title, evs, why=False):
+        nonlocal chars
+        lines = []
+        for e in evs:
+            if len(used) >= BUDGET["max_items"]: log["notes"].append("达到条数预算"); break
+            mark = "（就是对方刚才这条消息）" if e["id"] == current_key else ""
+            line = f"- [{e['id']}] {history.local(e['time'], tz)} {e['who']}：{e['text']}{mark}" + (f"　← {e['why']}" if why and e.get("why") else "")
+            if chars + len(line) > BUDGET["max_chars"]: log["notes"].append("达到字数预算"); break
+            lines.append(line); chars += len(line); used.append(e["id"])
+        if lines: blocks.append(title + "\n" + "\n".join(lines))
+    add("满足全部条件的原始消息：", qualifying)
+    add("相关但不满足硬性条件的消息（不能当作对方说法的证据）：", list(partial.values()), True)
+    if not qualifying: add("要求的时间段内的其他消息（与核验目标无关，仅供参考）：", context)
+    log.update(hits=[e["id"] for e in qualifying], partial=list(partial), returned=len(used), chars=chars)
+    scope = "；".join(f"第{t['tier']}级 {t['scope']}→{t['status']}" for t in log["tiers"]) or "没有可执行的检索条件"
+    head = f"检索范围：{scope}。" + (f"时间按 {log['time']['resolved_time_range']} 解析。" if rng else "")
+    if qualifying:
+        return head + "\n" + "\n\n".join(blocks), log
+    return head + "在本次检索覆盖的范围内，没有找到满足全部条件的原始消息；范围之外的情况无法确认，也不要推测原因。" + ("\n" + "\n\n".join(blocks) if blocks else ""), log
