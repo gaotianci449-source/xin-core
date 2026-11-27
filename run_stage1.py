@@ -111,6 +111,7 @@ def run_turns(case, group, conn, run_id, hist, params, proto):
         dir_ = engine.directory(conn)
         chat = reply.history(conn, run_id, 10000 if group == "D" else hist["window"])
         system = reply.SEED.format(who=who) + "\n\n" + reply.FORMAT + "\n\n" + reply.CONSTRAINTS
+        if os.environ.get("XIN_EXTRA"): system += "\n\n" + open(os.environ["XIN_EXTRA"], encoding="utf-8").read().strip()   # 回归检查：追加的提示词
         if group == "S": system += "\n\n关于对方，你此前记下的状态记录如下（只来自对方说过的话，可能不全）：\n" + snapshot(dir_)
         if group == "R": system += "\n\n关于对方，你此前记下的状态记录如下（只来自对方说过的话，可能不全），每条附来源提示：\n" + r_hints(conn, run_id, dir_, hist["abstracts"], tz)
         if group == "O": system += "\n\n关于对方，你此前记下的状态记录如下（只来自对方说过的话，可能不全）：\n" + snapshot(dir_, True) + "\n\n" + O_NOTE + (O_JSON if proto == "json" else "")
@@ -203,8 +204,8 @@ def main(mode="pilot", proto="tools", only=None):
     hist0 = json.load(open("fixtures/stage1_history.json", encoding="utf-8"))
     cs = json.load(open("fixtures/stage1_cases.json", encoding="utf-8"))
     params = json.load(open("e1_params.json", encoding="utf-8"))
-    out = os.path.join("runs", f"stage1-{mode}-{proto}-" + ("rerun-" if sel else "") + time.strftime("%Y%m%d-%H%M%S")); os.makedirs(out, exist_ok=True)
-    frozen = {"history": hist0, "cases": cs, "params": params, "o_protocol": proto, "budget": gateway.BUDGET, "tool": gateway.TOOL, "o_note": O_NOTE}
+    out = os.path.join("runs", f"stage1-{mode}-{proto}-" + ("rerun-" if sel else "") + ("extra-" if os.environ.get("XIN_EXTRA") else "") + time.strftime("%Y%m%d-%H%M%S")); os.makedirs(out, exist_ok=True)
+    frozen = {"history": hist0, "cases": cs, "params": params, "o_protocol": proto, "budget": gateway.BUDGET, "tool": gateway.TOOL, "o_note": O_NOTE, "extra_prompt": os.environ.get("XIN_EXTRA"), "groups": os.environ.get("XIN_GROUPS"), "cases_only": os.environ.get("XIN_CASES")}
     json.dump(frozen, open(os.path.join(out, "frozen_inputs.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     results, review = [], ["# 第一阶段人工语义判定表", "", f"批次：{mode}　O 组协议：{proto}　预算：{gateway.BUDGET}", ""]
     for case in cs["cases"]:
@@ -212,9 +213,11 @@ def main(mode="pilot", proto="tools", only=None):
         review += [f"## {case['case_id']}　{case['name']}", f"- 目标：{case['target']}", f"- 可接受：{case['acceptable']}",
                    f"- 必须拒绝：{case['must_reject']}", f"- 证据缺失时：{case['missing_behavior']}", f"- 允许澄清：{case['clarify_ok']}", ""]
         if sel and case["case_id"] != sel[0]: continue
+        if os.environ.get("XIN_CASES") and case["case_id"] not in os.environ["XIN_CASES"].split(","): continue
         for rnd in range(1, n + 1):
             for g in ("S", "R", "O", "D"):
                 if sel and (g != sel[1] or rnd not in sel[2]): continue
+                if os.environ.get("XIN_GROUPS") and g not in os.environ["XIN_GROUPS"].split(","): continue
                 run_id = f"{case['case_id']}:{g}:r{rnd}"
                 hist = copy.deepcopy(hist0)
                 conn = build_db(os.path.join(out, f"{case['case_id']}-{g}-r{rnd}.db"), hist, run_id)
