@@ -1,0 +1,367 @@
+{
+ "experiment_version": "natural-chat-pilot-V0.3",
+ "source_doc": "自然聊天先导实验_最终执行修订稿_V0.3_主审修订版.md",
+ "source_doc_sha256": "b5bb76a5c6f10ea1a63288057d1cc040740ec3ceeb9894ff011d1ac5016e3418",
+ "source_csv": "自然聊天先导实验_36会话随机运行序列表_V0.1.csv",
+ "source_csv_sha256": "0eb52bba6c7bffce98f95b872c58fd104b66629666c2d18ce6d4745af4b416f4",
+ "base_system": "你是一个对话模型，请根据用户消息进行回应。",
+ "guidance": "请像自然熟人聊天一样回应：根据对话内容决定回复长短，不必每次总结或列点；可以接住对方提到的细节、自然追问，也可以分享相关想法。不要刻意追求短，也不要为了显得热情而过度夸赞。",
+ "guidance_join": "\n\n",
+ "feedback": "接下来请更像自然聊天：少用汇报式总结和不必要的客套，回复长短按内容需要；可以顺着细节接话或追问，也可以分享相关想法，不要刻意变短。",
+ "samples": {
+  "S01": {
+   "scene": "轻状态闲聊",
+   "type": "轻闲聊",
+   "turns": [
+    "今天总算忙完了，脑子终于能放空一下。",
+    "其实也没发生什么大事，就是一整天都在处理零碎的事。",
+    "现在坐下来才发现，刚才一直没顾上喝水。",
+    "我准备先歇一会儿，不想马上安排下一件事。",
+    "对了，最近晚上风有点凉，我开始想把薄外套拿出来了。",
+    "我还挺喜欢这种天气，走路的时候舒服一点。",
+    "如果明天也这样，我可能下班后出去走一小圈。"
+   ]
+  },
+  "S02": {
+   "scene": "短句归家闲聊",
+   "type": "轻闲聊",
+   "turns": [
+    "到家了。",
+    "今天路上比平时慢。",
+    "也没什么，就是有点不想说话。",
+    "先坐沙发上缓缓。",
+    "刚才看到楼下有人在摆摊卖水果。",
+    "好像是橘子，颜色挺亮的。",
+    "明天路过的话我可能买几个。"
+   ]
+  },
+  "S03": {
+   "scene": "天空观察分享",
+   "type": "轻闲聊",
+   "turns": [
+    "刚才抬头看了一眼，天边颜色挺好看的。",
+    "不是特别红，是那种淡淡的橙粉色。",
+    "云也不多，感觉整个天空很干净。",
+    "我本来只是路过，结果站那儿看了一会儿。",
+    "说起来，我最近想把手机里的照片整理一下。",
+    "里面有很多随手拍的，基本都没分类。",
+    "可能先挑一些风景照出来，做个小相册。"
+   ]
+  },
+  "S04": {
+   "scene": "轻微调侃互动",
+   "type": "轻闲聊",
+   "turns": [
+    "我刚才差点把手机拿反了。",
+    "还好没真的对着镜头拍半天。",
+    "这种小失误挺像我会干出来的事。",
+    "不过至少没把消息发错人。",
+    "话说我最近想换一个手机壁纸。",
+    "现在这张用了挺久，看着有点腻了。",
+    "我可能找一张颜色简单一点的。"
+   ]
+  },
+  "S05": {
+   "scene": "疲惫低表达",
+   "type": "轻闲聊",
+   "turns": [
+    "今天有点累。",
+    "不是特别严重，就是整个人慢半拍。",
+    "现在不太想动。",
+    "先这样待一会儿吧。",
+    "我刚想起来，桌上那杯茶还没喝完。",
+    "应该已经凉了，不过也能喝。",
+    "等会儿我把杯子收一下就好。"
+   ]
+  },
+  "S06": {
+   "scene": "快速话题跳转",
+   "type": "轻闲聊",
+   "turns": [
+    "今天吃饭的时候突然想起以前的一件小事。",
+    "当时我把钥匙忘在屋里，出门后才发现。",
+    "最后还是找人帮忙开了门。",
+    "现在想起来有点好笑。",
+    "不过说到钥匙，我最近想给钥匙串换个挂件。",
+    "现在那个已经磨得差不多了。",
+    "我想找个简单耐用的，不用太花哨。"
+   ]
+  },
+  "S07": {
+   "scene": "多细节经历分享",
+   "type": "需展开",
+   "turns": [
+    "今天去办一件事，原本以为十几分钟就能结束。",
+    "到了才发现前面排了不少人，窗口还临时换了位置。",
+    "我先去问了一下，结果被告知要补一张材料。",
+    "后来来回跑了一趟，总算办完了，出来时已经比预计晚很多。",
+    "另外，我最近也在考虑周末做点简单的饭。",
+    "不想做太复杂的，最好是一锅就能解决。",
+    "可能先试试炖菜，准备好食材后放着慢慢煮。"
+   ]
+  },
+  "S08": {
+   "scene": "生活化轻疑问",
+   "type": "需展开",
+   "turns": [
+    "你觉得一个房间里最容易让人忽略的杂乱是什么？",
+    "我发现桌面看着还行，但抽屉里总是乱。",
+    "有些东西明明很少用，却一直舍不得扔。",
+    "所以每次整理都只是把它们换个地方放。",
+    "我还想把电脑里的文件也整理一下。",
+    "文件夹名字有些是随手起的，现在自己都不太记得。",
+    "可能得先按用途分几个大类，再慢慢整理。"
+   ]
+  },
+  "S09": {
+   "scene": "观点输出",
+   "type": "需展开",
+   "turns": [
+    "我觉得聊天不一定每句话都要有明确结论。",
+    "有时候只是分享一下当时的想法，也挺好的。",
+    "如果每次都急着总结，反而会让对话像工作汇报。",
+    "当然，遇到需要解决的问题时，清楚直接还是很重要。",
+    "我最近也在想，读书是不是不一定要每天读很多。",
+    "哪怕一次只读几页，只要能持续下去也不错。",
+    "我更倾向于先养成习惯，再慢慢增加时间。"
+   ]
+  }
+ },
+ "order": [
+  {
+   "run_order": 1,
+   "session_id": "S05-B",
+   "sample_id": "S05",
+   "condition": "B"
+  },
+  {
+   "run_order": 2,
+   "session_id": "S01-D",
+   "sample_id": "S01",
+   "condition": "D"
+  },
+  {
+   "run_order": 3,
+   "session_id": "S08-B",
+   "sample_id": "S08",
+   "condition": "B"
+  },
+  {
+   "run_order": 4,
+   "session_id": "S04-A",
+   "sample_id": "S04",
+   "condition": "A"
+  },
+  {
+   "run_order": 5,
+   "session_id": "S05-D",
+   "sample_id": "S05",
+   "condition": "D"
+  },
+  {
+   "run_order": 6,
+   "session_id": "S09-C",
+   "sample_id": "S09",
+   "condition": "C"
+  },
+  {
+   "run_order": 7,
+   "session_id": "S03-C",
+   "sample_id": "S03",
+   "condition": "C"
+  },
+  {
+   "run_order": 8,
+   "session_id": "S05-C",
+   "sample_id": "S05",
+   "condition": "C"
+  },
+  {
+   "run_order": 9,
+   "session_id": "S06-B",
+   "sample_id": "S06",
+   "condition": "B"
+  },
+  {
+   "run_order": 10,
+   "session_id": "S04-D",
+   "sample_id": "S04",
+   "condition": "D"
+  },
+  {
+   "run_order": 11,
+   "session_id": "S02-D",
+   "sample_id": "S02",
+   "condition": "D"
+  },
+  {
+   "run_order": 12,
+   "session_id": "S03-A",
+   "sample_id": "S03",
+   "condition": "A"
+  },
+  {
+   "run_order": 13,
+   "session_id": "S01-A",
+   "sample_id": "S01",
+   "condition": "A"
+  },
+  {
+   "run_order": 14,
+   "session_id": "S08-C",
+   "sample_id": "S08",
+   "condition": "C"
+  },
+  {
+   "run_order": 15,
+   "session_id": "S07-D",
+   "sample_id": "S07",
+   "condition": "D"
+  },
+  {
+   "run_order": 16,
+   "session_id": "S06-D",
+   "sample_id": "S06",
+   "condition": "D"
+  },
+  {
+   "run_order": 17,
+   "session_id": "S09-B",
+   "sample_id": "S09",
+   "condition": "B"
+  },
+  {
+   "run_order": 18,
+   "session_id": "S07-A",
+   "sample_id": "S07",
+   "condition": "A"
+  },
+  {
+   "run_order": 19,
+   "session_id": "S09-D",
+   "sample_id": "S09",
+   "condition": "D"
+  },
+  {
+   "run_order": 20,
+   "session_id": "S02-C",
+   "sample_id": "S02",
+   "condition": "C"
+  },
+  {
+   "run_order": 21,
+   "session_id": "S06-A",
+   "sample_id": "S06",
+   "condition": "A"
+  },
+  {
+   "run_order": 22,
+   "session_id": "S04-C",
+   "sample_id": "S04",
+   "condition": "C"
+  },
+  {
+   "run_order": 23,
+   "session_id": "S02-A",
+   "sample_id": "S02",
+   "condition": "A"
+  },
+  {
+   "run_order": 24,
+   "session_id": "S08-D",
+   "sample_id": "S08",
+   "condition": "D"
+  },
+  {
+   "run_order": 25,
+   "session_id": "S03-D",
+   "sample_id": "S03",
+   "condition": "D"
+  },
+  {
+   "run_order": 26,
+   "session_id": "S01-C",
+   "sample_id": "S01",
+   "condition": "C"
+  },
+  {
+   "run_order": 27,
+   "session_id": "S09-A",
+   "sample_id": "S09",
+   "condition": "A"
+  },
+  {
+   "run_order": 28,
+   "session_id": "S05-A",
+   "sample_id": "S05",
+   "condition": "A"
+  },
+  {
+   "run_order": 29,
+   "session_id": "S04-B",
+   "sample_id": "S04",
+   "condition": "B"
+  },
+  {
+   "run_order": 30,
+   "session_id": "S07-C",
+   "sample_id": "S07",
+   "condition": "C"
+  },
+  {
+   "run_order": 31,
+   "session_id": "S02-B",
+   "sample_id": "S02",
+   "condition": "B"
+  },
+  {
+   "run_order": 32,
+   "session_id": "S06-C",
+   "sample_id": "S06",
+   "condition": "C"
+  },
+  {
+   "run_order": 33,
+   "session_id": "S08-A",
+   "sample_id": "S08",
+   "condition": "A"
+  },
+  {
+   "run_order": 34,
+   "session_id": "S03-B",
+   "sample_id": "S03",
+   "condition": "B"
+  },
+  {
+   "run_order": 35,
+   "session_id": "S07-B",
+   "sample_id": "S07",
+   "condition": "B"
+  },
+  {
+   "run_order": 36,
+   "session_id": "S01-B",
+   "sample_id": "S01",
+   "condition": "B"
+  }
+ ],
+ "conditions": {
+  "A": {
+   "guidance": false,
+   "feedback": false
+  },
+  "B": {
+   "guidance": true,
+   "feedback": false
+  },
+  "C": {
+   "guidance": false,
+   "feedback": true
+  },
+  "D": {
+   "guidance": true,
+   "feedback": true
+  }
+ },
+ "feedback_after_round": 3
+}
